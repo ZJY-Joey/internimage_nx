@@ -16,6 +16,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(OpenMP REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -25,7 +26,7 @@ target_include_directories(octomap_update PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
 target_compile_features(octomap_update PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-
+target_link_libraries(octomap_update OpenMP::OpenMP_CXX)
 ament_target_dependencies(octomap_update
   "rclcpp"
   "octomap"

@@ -10,6 +10,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
+#include <omp.h> 
 
 // update octomap by registering a client to call the clear_bbox service
 
@@ -103,7 +104,15 @@ public:
     // Check fields
     bool has_x=false, has_y=false, has_z=false;
     for (const auto & f : msg->fields){
-      if (f.name=="x") has_x=true; if (f.name=="y") has_y=true; if (f.name=="z") has_z=true;
+      if (f.name=="x"){
+        has_x=true; 
+      } 
+      if (f.name=="y") {
+        has_y=true;
+      } 
+      if (f.name=="z"){
+         has_z=true;
+      }
     }
     if (!has_x || !has_y || !has_z){  
       RCLCPP_WARN(this->get_logger(), "PointCloud2 missing x/y/z fields; skip.");
@@ -121,6 +130,7 @@ public:
 
     size_t sent = 0;
     for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z){
+      double t1  = omp_get_wtime();
       geometry_msgs::msg::PointStamped pt_src;
       pt_src.header.frame_id = source_frame;
       pt_src.header.stamp = msg->header.stamp;
@@ -146,7 +156,11 @@ public:
         // RCLCPP_INFO(this->get_logger(), "Clear point bbox (%zu): (%.2f %.2f %.2f)->(%.2f %.2f %.2f) frame=%s", sent, min_x, min_y, min_z, max_x, max_y, max_z, target_frame_.c_str());
       }
       call_clear_bbox_service(min_x, min_y, min_z, max_x, max_y, max_z);
+      double t2 = omp_get_wtime();
+      std::cout<<"t2 - t1 time to clear bbox: "<<t2 - t1<<std::endl;
+      RCLCPP_INFO(this->get_logger(), "Time to clear bbox: %.6f seconds", t2 - t1);
       ++sent;
+
     }
   }
 
