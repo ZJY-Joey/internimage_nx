@@ -80,9 +80,8 @@ def generate_launch_description():
                     }],
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
                                 ('combined/image_rect_combined', '/internimage/combined_segmentation_mask'),
-                                ('confidence/image_rect_confidence', '/zed/zed_node/confidence/confidence_map'), # /zed/zed_node/depth/depth_registered/decompressed  /zed/zed_node/confidence/confidence_map/decompressedConfidence
                                 ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered/decompressed'), #   /zed/zed_node/depth/depth_registered
-                                ('lidar/points', '/cloud_registered/acc/filtered'),
+                                ('lidar/points', '/cloud_registered/acc/filtered/voxel'),
                                 ('points', '/internimage/segmentation/projected/points'),
                                 ('ground_points', '/internimage/segmentation/ground_points')]
                 ),
@@ -152,7 +151,7 @@ def generate_launch_description():
                         'filter_field_name': 'x',
                         'filter_limit_min': 0.0,
                         # with too many ground points, octomap server will be too slow and do not actually update
-                        'filter_limit_max': 1.5,
+                        'filter_limit_max': 2.0,
                     }],
                     remappings=[('input', '/internimage/segmentation/ground_points'),
                                 ('output', '/internimage/segmentation/ground_points/filtered')]
@@ -161,23 +160,23 @@ def generate_launch_description():
 
 
 
-                launch_ros.descriptions.ComposableNode(
-                    package='pcl_ros',
-                    plugin='pcl_ros::VoxelGrid',
-                    name='voxel_grid_node_ground',
-                    parameters=[{
-                        'use_sim_time': use_sim_time,
-                        'input_frame': 'aliengo',
-                        'output_frame': 'world',  
-                        'leaf_size': 0.2,
-                        'filter_field_name': 'z',
-                        'filter_limit_min': -1000.0,
-                        'filter_limit_max': 1000.0,
-                        # 'min_points_per_voxel': 100,
-                    }],
-                    remappings=[('input', '/internimage/segmentation/ground_points/filtered'),
-                                ('output', '/internimage/segmentation/ground_points/filtered/voxel')]
-                ),
+                # launch_ros.descriptions.ComposableNode(
+                #     package='pcl_ros',
+                #     plugin='pcl_ros::VoxelGrid',
+                #     name='voxel_grid_node_ground',
+                #     parameters=[{
+                #         'use_sim_time': use_sim_time,
+                #         'input_frame': 'aliengo',
+                #         'output_frame': 'world',  
+                #         'leaf_size': 0.5,
+                #         'filter_field_name': 'z',
+                #         'filter_limit_min': -1000.0,
+                #         'filter_limit_max': 1000.0,
+                #         # 'min_points_per_voxel': 100,
+                #     }],
+                #     remappings=[('input', '/internimage/segmentation/ground_points/filtered'),
+                #                 ('output', '/internimage/segmentation/ground_points/filtered/voxel')]
+                # ),
             ],
             output='screen',
         ),

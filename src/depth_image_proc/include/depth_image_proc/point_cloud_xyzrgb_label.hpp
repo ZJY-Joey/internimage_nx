@@ -69,14 +69,14 @@ private:
 
   // Subscriptions
   // Image subscriptions (depth, combined segmentation/color, confidence)
-  image_transport::SubscriberFilter sub_depth_, sub_combined_, sub_conf_;
+  image_transport::SubscriberFilter sub_depth_, sub_combined_;
   // Lidar pointcloud subscription (needs a plain message_filters::Subscriber, not image_transport)
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_pointcloud_;
   message_filters::Subscriber<CameraInfo> sub_info_;
   using SyncPolicy =
-    message_filters::sync_policies::ApproximateTime<Image, Image, Image, CameraInfo>;
+    message_filters::sync_policies::ApproximateTime<Image, Image, CameraInfo>;
   using ExactSyncPolicy =
-    message_filters::sync_policies::ExactTime<Image, Image, Image, CameraInfo>;
+    message_filters::sync_policies::ExactTime<Image, Image, CameraInfo>;
   using Synchronizer = message_filters::Synchronizer<SyncPolicy>;
   using ExactSynchronizer = message_filters::Synchronizer<ExactSyncPolicy>;
   
@@ -89,6 +89,7 @@ private:
   rclcpp::Publisher<PointCloud2>::SharedPtr pub_ground_point_cloud_;
 
   image_geometry::PinholeCameraModel model_;
+  sensor_msgs::msg::PointCloud2::SharedPtr latest_lidar_pointcloud_;
   sensor_msgs::msg::PointCloud2::SharedPtr latest_transformed_pointcloud_;
   rclcpp::Time last_processed_lidar_cloud_stamp_;
 
@@ -97,7 +98,6 @@ private:
   void imageCb(
     const Image::ConstSharedPtr & depth_msg,
     const Image::ConstSharedPtr & combined_msg,
-    const Image::ConstSharedPtr & conf_msg,
     const CameraInfo::ConstSharedPtr & info_msg);
   
   void pointcloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);

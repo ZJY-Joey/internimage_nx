@@ -61,7 +61,6 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
       ExactSyncPolicy(queue_size),
       sub_depth_,
       sub_combined_,
-      sub_conf_,
       sub_info_);
     exact_sync_->registerCallback(
       std::bind(
@@ -69,11 +68,10 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
         this,
         std::placeholders::_1,
         std::placeholders::_2,
-        std::placeholders::_3,
-        std::placeholders::_4
+        std::placeholders::_3
       ));
   } else {
-    sync_ = std::make_shared<Synchronizer>(SyncPolicy(queue_size), sub_depth_, sub_combined_, sub_conf_, sub_info_); //sub_rgb_, sub_id_,
+    sync_ = std::make_shared<Synchronizer>(SyncPolicy(queue_size), sub_depth_, sub_combined_, sub_info_); //sub_rgb_, sub_id_,
     // Configure slop window for ApproximateTime policy
     sync_->setMaxIntervalDuration(rclcpp::Duration::from_seconds(approx_sync_slop));
     sync_->registerCallback(
@@ -82,8 +80,7 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
         this,
         std::placeholders::_1,
         std::placeholders::_2,
-        std::placeholders::_3,
-        std::placeholders::_4));
+        std::placeholders::_3));
   }
 
 
@@ -109,10 +106,7 @@ void PointCloudXyzrgbLabelNode::connectCb()
   if (0) {
     // TODO(ros2) Implement getNumSubscribers when rcl/rmw support it
     sub_depth_.unsubscribe();
-    // sub_rgb_.unsubscribe();
-    // sub_id_.unsubscribe();
     sub_combined_.unsubscribe();
-    sub_conf_.unsubscribe();
     sub_info_.unsubscribe();
   } else if (!sub_depth_.getSubscriber()) {
     // parameter for depth_image_transport hint
@@ -141,12 +135,6 @@ void PointCloudXyzrgbLabelNode::connectCb()
         combined_hints.getTransport(), rmw_qos_profile_default, sub_opts);
 
 
-    //confidence uses confidence ros transport hints.
-    image_transport::TransportHints conf_hints(this, "raw");
-    sub_conf_.subscribe(
-        this, "confidence/image_rect_confidence",
-        conf_hints.getTransport(), rmw_qos_profile_default, sub_opts);
-
     // Subscribe to lidar pointcloud using message_filters subscriber (not image_transport)
     sub_pointcloud_ = create_subscription<sensor_msgs::msg::PointCloud2>(
       "lidar/points",
@@ -162,51 +150,40 @@ void PointCloudXyzrgbLabelNode::pointcloud_callback(const sensor_msgs::msg::Poin
   // Always cache a usable LiDAR cloud in target_frame_ if possible; otherwise fallback to original
   // std::cout<<"pointcloud_callback called"<<std::endl;
 
-  if (msg->header.frame_id != target_frame_) {
-    try {
-      geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
-        target_frame_,
-        msg->header.frame_id,
-        rclcpp::Time(msg->header.stamp),
-        rclcpp::Duration::from_seconds(0.2));
-      sensor_msgs::msg::PointCloud2 transformed;
-      tf2::doTransform(*msg, transformed, t);
-      transformed.header.frame_id = target_frame_;
-      latest_transformed_pointcloud_ = std::make_shared<sensor_msgs::msg::PointCloud2>(std::move(transformed));
-      RCLCPP_DEBUG(this->get_logger(), "Transformed pointcloud from %s to %s",
-                   msg->header.frame_id.c_str(), target_frame_.c_str());
-    } catch (const std::exception & e) {
-      RCLCPP_WARN(this->get_logger(),
-                  "TF lookup/transform failed: %s. Dropping this LiDAR cloud (frame: %s); waiting for transform to %s",
-                  e.what(), msg->header.frame_id.c_str(), target_frame_.c_str());
-      // Do not update latest_transformed_pointcloud_ to avoid projecting from a non-optical frame
-    }
-  } else {
-    // Already in target frame; keep as-is
-    latest_transformed_pointcloud_ = msg;
-  }
-  // latest_transformed_pointcloud_msg = msg;
+  latest_lidar_pointcloud_ = msg;
 }
 
 void PointCloudXyzrgbLabelNode::imageCb(
   const Image::ConstSharedPtr & depth_msg,
   const Image::ConstSharedPtr & combined_msg_in,
-  const Image::ConstSharedPtr & conf_msg_in,
   const CameraInfo::ConstSharedPtr & info_msg)
 {
+
+  if (latest_lidar_pointcloud_->header.frame_id != target_frame_) {
+    try {
+      geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
+        target_frame_,
+        latest_lidar_pointcloud_->header.frame_id,
+        rclcpp::Time(combined_msg_in->header.stamp),
+        rclcpp::Duration::from_seconds(0.2));
+      sensor_msgs::msg::PointCloud2 transformed;
+      tf2::doTransform(*latest_lidar_pointcloud_, transformed, t);
+      transformed.header.frame_id = target_frame_;
+      latest_transformed_pointcloud_ = std::make_shared<sensor_msgs::msg::PointCloud2>(std::move(transformed));
+      RCLCPP_DEBUG(this->get_logger(), "Transformed pointcloud from %s to %s",
+                   latest_lidar_pointcloud_->header.frame_id.c_str(), target_frame_.c_str());
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(this->get_logger(),
+                  "TF lookup/transform failed: %s. Dropping this LiDAR cloud (frame: %s); waiting for transform to %s",
+                  e.what(), latest_lidar_pointcloud_->header.frame_id.c_str(), target_frame_.c_str());
+      // Do not update latest_transformed_pointcloud_ to avoid projecting from a non-optical frame
+    }
+  } else {
+    // Already in target frame; keep as-is
+    latest_transformed_pointcloud_ = latest_lidar_pointcloud_;
+  }
   // RCLCPP_INFO(
   //   get_logger(), "PointCloudXyzrgbLabelNode::imageCb called");
-    
- 
-  //check for bad inputs of confidence image
-  if (depth_msg->header.frame_id != conf_msg_in->header.frame_id) {
-    RCLCPP_WARN_THROTTLE(
-      get_logger(),
-      *get_clock(),
-      10000,  // 10 seconds
-      "Depth image frame id [%s] doesn't match Confidence image frame id [%s]",
-      depth_msg->header.frame_id.c_str(), conf_msg_in->header.frame_id.c_str());
-  }
 
   // Update camera model
   model_.fromCameraInfo(info_msg);
@@ -220,14 +197,6 @@ void PointCloudXyzrgbLabelNode::imageCb(
     combined_msg = combined_msg_in;
   }
 
-  // check if the input color image has to be resized
-  Image::ConstSharedPtr conf_msg = conf_msg_in;
-  if(depth_msg->width != conf_msg->width || depth_msg->height != conf_msg->height) {
-    throw std::runtime_error("Confidence image size does not match depth image size.");
-    return;
-  } else {
-    conf_msg = conf_msg_in;
-  }
 
   // Supported color encodings: RGB8, BGR8, MONO8
   int red_offset, green_offset, blue_offset, color_step;
@@ -309,13 +278,7 @@ void PointCloudXyzrgbLabelNode::imageCb(
     // convert depth image to pointcloud with condition filter of label
     if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
       throw std::runtime_error("depth msg encoding TYPE_16UC1 not supported.");
-      // std::cout<<"convertDepthwithLabelAndConfidence - uint16_t"<<std::endl;
-      // convertDepthwithCombinedmsg<uint16_t>(depth_msg, cloud_msg, combined_msg, conf_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
-      // convertDepthwithCombinedmsg<uint16_t>(depth_msg, ground_cloud_msg, combined_msg, conf_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
     } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-      // accept combined msg in case color msg and id msg are not well aligned
-      // convertDepthwithCombinedmsg<float>(depth_msg, cloud_msg, combined_msg, conf_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
-      // convertDepthwithCombinedmsg<float>(depth_msg, ground_cloud_msg, combined_msg, conf_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
       if(latest_transformed_pointcloud_ == nullptr){
         RCLCPP_ERROR(
         get_logger(), "No LiDAR pointcloud received yet, cannot proceed.");

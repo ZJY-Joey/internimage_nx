@@ -118,9 +118,17 @@ private:
 
   void append_to_aggregated(const sensor_msgs::msg::PointCloud2::SharedPtr & cloud)
   {
+    // for (const auto &field : cloud->fields) {
+    //   std::cout << field.name << " " << field.offset << " " << field.datatype << " " << field.count << "\n";
+    // }
+    // std::cout << "--------------------------------------------------------" << std::endl;
     if (!aggregated_) {
       aggregated_ = std::make_shared<sensor_msgs::msg::PointCloud2>(*cloud);
       // ensure mutable data buffer
+      aggregated_->point_step = cloud->point_step;
+      aggregated_->is_bigendian = cloud->is_bigendian;
+      aggregated_->fields = cloud->fields;
+      aggregated_->height = cloud->height;
       aggregated_->data = cloud->data;
       return;
     }
@@ -130,7 +138,7 @@ private:
         cloud->is_bigendian != aggregated_->is_bigendian ||
         cloud->fields != aggregated_->fields ||
         cloud->height != aggregated_->height) {
-      RCLCPP_WARN(this->get_logger(), "Incoming cloud layout mismatch; skipping accumulation.");
+      RCLCPP_WARN(this->get_logger(), "not compatible");
       return;
     }
 

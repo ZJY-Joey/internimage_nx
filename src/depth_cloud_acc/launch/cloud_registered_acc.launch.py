@@ -43,6 +43,25 @@ def generate_launch_description():
                                 ('output', '/cloud_registered/acc/filtered')]
                 ),
 
+
+                  launch_ros.descriptions.ComposableNode(
+                    package='pcl_ros',
+                    plugin='pcl_ros::VoxelGrid',
+                    name='voxel_grid_node_ground',
+                    parameters=[{
+                        'use_sim_time': use_sim_time,
+                        'input_frame': 'aliengo',
+                        'output_frame': 'world',  
+                        'leaf_size': 0.5,
+                        'filter_field_name': 'z',
+                        'filter_limit_min': -1000.0,
+                        'filter_limit_max': 1000.0,
+                        # 'min_points_per_voxel': 100,
+                    }],
+                    remappings=[('input', '/cloud_registered/acc/filtered'),
+                                ('output', '/cloud_registered/acc/filtered/voxel')]
+                ),
+
                 # launch_ros.descriptions.ComposableNode(
                 #     package='pcl_ros',
                 #     plugin='pcl_ros::PassThrough',
