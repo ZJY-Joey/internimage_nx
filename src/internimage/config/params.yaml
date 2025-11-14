@@ -1,0 +1,15 @@
+internimage:
+  ros__parameters:
+    #订阅话题
+    image_topic: "/zed/zed_node/rgb/color/rect/image/compressed"
+    depth_topic: "/zed/zed_node/depth/depth_registered"
+    use_sim_time: false
+    # 发布话题
+    result_topic: "/internimage/segmentation"
+    # 模型绝对路径
+    # default_data_dir: "/home/jetson/workspaces/segmentation_ws/models/internimage_l/"
+    # model_name: "end2end"
+
+    default_data_dir: "/home/jetson/workspaces/segmentation_ws/models/internimage_s/"
+    model_name: "upernet_internimage_s_300x480_int8fp16"
+
