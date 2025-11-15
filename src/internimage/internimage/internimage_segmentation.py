@@ -17,7 +17,7 @@ from cv_bridge import CvBridge
 
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import Image, CompressedImage
 from rclpy.qos import QoSPresetProfiles
 
 # Use non-interactive backend for matplotlib when saving images
@@ -188,8 +188,13 @@ class InternImageNode(Node):
         self.result_topic = self.get_parameter("result_topic").get_parameter_value().string_value
         self.declare_parameter("model_name","upernet_internimage_s_300x480_int8fp16")
         self.model_name = self.get_parameter("model_name").get_parameter_value().string_value
+        self.declare_parameter("default_data_dir","/home/jetson/workspaces/segmentation_ws/models/internimage_s/")
+        default_data_dir = self.get_parameter('default_data_dir').get_parameter_value().string_value    
         # self.declare_parameter("depth_topic")
         # self.depth_topic = self.get_parameter("depth_topic").value
+        # self.depthImage_sub = self.create_subscription(
+        #     Image, self.depth_topic, self.depth_callback, sensor_qos
+        # )
         # 发布绘制后的图像
         self.internimage_pub = self.create_publisher(CompressedImage, self.result_topic, 10)
         # 使用传感器数据 QoS 以匹配相机数据特性
@@ -198,13 +203,21 @@ class InternImageNode(Node):
         self.image_sub = self.create_subscription(
             CompressedImage, self.image_topic, self.image_callback, sensor_qos
         )
-        # self.depthImage_sub = self.create_subscription(
-        #     Image, self.depth_topic, self.depth_callback, sensor_qos
-        # )
-        self.declare_parameter("default_data_dir","/home/jetson/workspaces/segmentation_ws/models/internimage_s/")
-        default_data_dir = self.get_parameter('default_data_dir').get_parameter_value().string_value    
+        # Read flattened color palette (RGB triplets flattened)
+        # YAML key should be 'color_palette_flat': [r0,g0,b0, r1,g1,b1, ...]
+        self.declare_parameter("color_palette_flat", [])
+        flat_palette = self.get_parameter("color_palette_flat").value
+        self._palette = []
+        try:
+            if isinstance(flat_palette, (list, tuple)) and (len(flat_palette) % 3 == 0):
+                it = iter(int(x) for x in flat_palette)
+                self._palette = [[next(it), next(it), next(it)] for _ in range(len(flat_palette)//3)]
+                self.get_logger().info(f"Loaded color palette with {len(self._palette)} colors")
+            elif flat_palette:
+                self.get_logger().warning(f"color_palette_flat length {len(flat_palette)} is not multiple of 3; ignoring palette")
+        except Exception as e:
+            self.get_logger().warning(f"Failed to parse color_palette_flat: {e}")
 
-        # test_images = data_files[0:3]
         onnx_model_file = default_data_dir + self.model_name + '.onnx'
 
         self.get_logger().info(f"Using data_dir: {default_data_dir}")
@@ -233,24 +246,51 @@ class InternImageNode(Node):
         self._bindings = bindings
         self._stream = stream
         self._context = context
-        # self._test_images = test_images
+        # Precompute normalization constants for fast per-frame preprocessing
+        self._mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)  # RGB
+        self._inv_std = np.array([1.0/58.395, 1.0/57.12, 1.0/57.375], dtype=np.float32)  # RGB
 
-        # class_labels_file = os.path.join(data_dir, 'class_labels.txt')
-        # self.class_names = None
-        # if os.path.exists(class_labels_file):
-        #     try:
-        #         with open(class_labels_file, 'r') as fh:
-        #             self.class_names = [l.strip() for l in fh.readlines() if l.strip()]
-        #         self.get_logger().info(f'Loaded {len(self.class_names)} class names from {class_labels_file}')
-        #     except Exception:
-        #         self.get_logger().warning(f'Failed to read class labels from {class_labels_file}')
+
 
         # CvBridge for converting sensor_msgs/Image to OpenCV
         self.bridge = CvBridge()
 
 
+    def _preprocess_to_trt_input(self, bgr_image):
+        """Fast path: BGR -> RGB, resize to (H,W), normalize, write into TRTPagelocked buffer.
+        Expects ModelData.INPUT_SHAPE=(C,H,W).
+        """
+        # print("================================ Preprocessing ==================")
+        c, h, w = ModelData.INPUT_SHAPE
+        ih, iw = bgr_image.shape[:2]
+        if (ih, iw) != (h, w):
+            # INTER_AREA for downscale, INTER_LINEAR for upsample
+            interp = cv2.INTER_AREA if ih >= h and iw >= w else cv2.INTER_LINEAR
+            bgr = cv2.resize(bgr_image, (w, h), interpolation=interp)
+        else:
+            bgr = bgr_image
+
+        # Convert BGR->RGB
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        # To float32 for math
+        rgb = rgb.astype(np.float32, copy=False)
+        # Normalize per channel: (x - mean) / std  => (x - mean) * inv_std
+        rgb -= self._mean
+        rgb *= self._inv_std
+
+        # Write into TensorRT host buffer in CHW order
+        host = self._inputs[0].host
+        host_view = host.reshape((c, h, w))
+        if host_view.dtype != rgb.dtype:
+            rgb = rgb.astype(host_view.dtype, copy=False)
+        # Split channels without extra copies
+        host_view[0, :, :] = rgb[:, :, 0]
+        host_view[1, :, :] = rgb[:, :, 1]
+        host_view[2, :, :] = rgb[:, :, 2]
+        # print("================================ End Preprocessing ==================")
+
     def image_callback(self, msg):
-        print("Received image message.")
+        t0 = time.time_ns()
         try:
             # Decode incoming ROS image (CompressedImage or Image) into an OpenCV BGR ndarray
             if isinstance(msg, CompressedImage):
@@ -263,13 +303,13 @@ class InternImageNode(Node):
             else:
                 raise TypeError(f"不支持的图像消息类型: {type(msg)}，请发布 Image 或 CompressedImage")
             
-            # TODO: 40ms
+            t1 = time.time_ns()
             print("cv_image received, shape:", cv_image.shape) #( h w c)
-            # Convert BGR ndarray -> RGB PIL and normalize into the page-locked input buffer
-            pil = PILImage.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
-            print("pil image created, size:", pil.size)  # (w h)
-            np.copyto(self._inputs[0].host, normalize_pil_image(pil))
-            print("self._inputs[0].host shape:", self._inputs[0].host.shape)
+            # Fast preprocess (BGR -> RGB, resize, normalize) directly into TensorRT host buffer
+            self._preprocess_to_trt_input(cv_image)
+            t2 = time.time_ns()
+            preprocess_ms = (t2 - t1) / 1e6
+            # self.get_logger().info(f'Preprocess time: {preprocess_ms:.3f} ms') check
 
 
             start_ns = time.time_ns()
@@ -290,6 +330,7 @@ class InternImageNode(Node):
 
             segmentation = trt_outputs[0].reshape((300, 480))  # 600 960
             print("segmentation shape:", segmentation.shape)
+            print("segmentation[0][0]:", segmentation[0][0])
 
             # Visualize segmentation (colorize + optional legend) and encode to PNG
 
@@ -297,17 +338,11 @@ class InternImageNode(Node):
             try:
                 png_bytes, composed = visualize_segmentation_and_encode(
                     segmentation,
-                    palette=None,
+                    palette=self._palette if self._palette else None,
                     class_names=getattr(self, 'class_names', None),
                     merge_legend=True,
                     legend_placement='right'
                 )
-
-                # Save to disk too
-                # out_path = os.path.join(os.getcwd(), 'segmentation_output.png')
-                # with open(out_path, 'wb') as f:
-                #     f.write(png_bytes)
-                # self.get_logger().info(f'Saved segmentation to: {out_path}')
 
                 # Publish as CompressedImage with PNG bytes
                 msg = CompressedImage()
@@ -321,6 +356,10 @@ class InternImageNode(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error during inference/publish: {e}')
+        # check inference total time
+        t1 = time.time_ns()
+        elapsed_ms = (t1 - t0) / 1e6
+        self.get_logger().info(f'Total callback time: {elapsed_ms:.3f} ms')
 
     def destroy_node(self):
         # Try to free buffers
