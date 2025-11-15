@@ -60,10 +60,9 @@ def generate_launch_description():
                     package='depth_image_proc',
                     plugin='depth_image_proc::PointCloudXyzrgbNode',
                     name='point_cloud_xyzrgb_node',
-                    remappings=[('rgb/camera_info', '/camera/color/camera_info'),
-                                ('rgb/image_rect_color', '/camera/color/image_raw'),
-                                ('depth_registered/image_rect',
-                                 '/camera/aligned_depth_to_color/image_raw'),
+                    remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
+                                ('rgb/image_rect_color', '/zed/zed_node/rgb/color/rect/image/compressed/internimage/segmented'),
+                                ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered/compressedDepth'),
                                 ('points', '/camera/depth_registered/points')]
                 ),
             ],
