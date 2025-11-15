@@ -122,6 +122,24 @@ def colorize_segmentation(segmentation, palette=None):
     bgr = rgb[..., ::-1].copy()
     return bgr
 
+def segmentation_to_color_image(segmentation, palette=None):
+    """Map segmentation ids to a BGR uint8 image using a fast vectorized path."""
+    seg = segmentation.astype(np.int32, copy=False)
+    h, w = seg.shape
+    if palette is None or len(palette) == 0:
+        cmap = plt.get_cmap('tab20')
+        max_id = int(seg.max()) if seg.size else 0
+        palette = [[int(255 * c) for c in cmap(i / max(1, max_id + 1))[:3]] for i in range(max_id + 1)]
+    P = np.asarray(palette, dtype=np.uint8)
+    if P.ndim != 2 or P.shape[1] != 3:
+        P = np.zeros((max(1, len(palette)), 3), dtype=np.uint8)
+    idx = np.clip(seg, 0, len(P) - 1)
+    rgb = P[idx]  # HxWx3 RGB
+    # print("rgb shape:", rgb.shape)
+    # bgr = rgb[..., ::-1].copy()
+    # print("bgr shape:", bgr.shape)
+    return rgb
+
 
 def overlay_segmentation_and_encode(segmentation, original_bgr, palette=None, class_names=None,
                                     alpha=0.5, merge_legend=False, legend_placement='right',
@@ -152,6 +170,8 @@ def overlay_segmentation_and_encode(segmentation, original_bgr, palette=None, cl
     if color_mask.dtype != np.uint8:
         color_mask = color_mask.astype(np.uint8, copy=False)
     overlay = cv2.addWeighted(original_bgr, 1.0 - alpha, color_mask, alpha, 0.0)
+
+    print("color_mask.shape", color_mask.shape)
 
     out_img = overlay
     if merge_legend and (class_names is not None):
@@ -185,7 +205,7 @@ class InternImageNode(Node):
         # Parameters
         self.declare_parameter("image_topic","/zed/zed_node/rgb/color/rect/image/compressed")
         self.image_topic = self.get_parameter("image_topic").get_parameter_value().string_value
-        self.declare_parameter("result_topic","/internimage/segmentation")
+        self.declare_parameter("result_topic","/zed/zed_node/rgb/color/rect/image/compressed/internimage/segmented")
         self.result_topic = self.get_parameter("result_topic").get_parameter_value().string_value
         self.declare_parameter("model_name","upernet_internimage_s_300x480_int8fp16")
         self.model_name = self.get_parameter("model_name").get_parameter_value().string_value
@@ -201,6 +221,10 @@ class InternImageNode(Node):
         self.image_sub = self.create_subscription(
             CompressedImage, self.image_topic, self.image_callback, sensor_qos
         )
+        # 发布原始分割标签图（数值）
+        self.declare_parameter("segmentation_topic", "/internimage/segmentation_mask")
+        self.segmentation_topic = self.get_parameter("segmentation_topic").get_parameter_value().string_value
+        self.seg_pub = self.create_publisher(Image, self.segmentation_topic, sensor_qos)
         # Disabled by default; implement depth_callback before enabling to avoid runtime errors.
         # self.depth_sub = self.create_subscription(
         #     CompressedImage, self.depth_topic, self.depth_callback, sensor_qos
@@ -245,12 +269,19 @@ class InternImageNode(Node):
         self.declare_parameter('publish_stride', 1)
         self.declare_parameter('output_format', 'jpeg')  # 'jpeg' or 'png'
         self.declare_parameter('jpeg_quality', 80)
+        # Combined matrix publish control (segmentation + color)
+        self.declare_parameter('publish_combined', True)
+        self.declare_parameter('combined_target_height', 600)
+        self.declare_parameter('combined_target_width', 960)
 
         self.show_legend = bool(self.get_parameter('show_legend').value)
         self.overlay_alpha = float(self.get_parameter('overlay_alpha').value)
         self.publish_stride = max(1, int(self.get_parameter('publish_stride').value))
         self.output_format = str(self.get_parameter('output_format').value)
         self.jpeg_quality = int(self.get_parameter('jpeg_quality').value)
+        self.publish_combined = bool(self.get_parameter('publish_combined').value)
+        self.combined_h = int(self.get_parameter('combined_target_height').value)
+        self.combined_w = int(self.get_parameter('combined_target_width').value)
 
         # Debug summary (concise)
         if self._palette:
@@ -297,6 +328,50 @@ class InternImageNode(Node):
 
         # CvBridge for converting sensor_msgs/Image to OpenCV
         self.bridge = CvBridge()
+
+    def _segmentation_to_image_msg(self, seg2d, header=None):
+        """将(H,W)整型分割图发布为 sensor_msgs/Image。
+        根据取值范围自动选择编码：mono8/mono16/32SC1。
+        """
+        seg = np.asarray(seg2d)
+        # 确保二维
+        if seg.ndim != 2:
+            raise ValueError(f"segmentation must be 2D, got shape {seg.shape}")
+        # 负值裁剪为0，避免编码问题
+        seg = np.clip(seg, 0, None)
+        max_val = int(seg.max()) if seg.size else 0
+        if max_val <= 255:
+            seg_enc = 'mono8'
+            seg_np = seg.astype(np.uint8, copy=False)
+        elif max_val <= 65535:
+            seg_enc = 'mono16'
+            seg_np = seg.astype(np.uint16, copy=False)
+        else:
+            seg_enc = '32SC1'
+            seg_np = seg.astype(np.int32, copy=False)
+        img_msg = self.bridge.cv2_to_imgmsg(seg_np, encoding=seg_enc)
+        if header is not None:
+            img_msg.header = header
+        return img_msg
+
+    def _combined_seg_color_msg(self, seg2d, color_rgb, header=None):
+        """构造 (H,W,4) 矩阵: [seg_id, R, G, B] 并发布为多通道图像。
+        注意：ROS 标准编码没有直接 "RGB(seg)+ID" 格式，采用通道重排确保兼容。
+        """
+        seg = np.asarray(seg2d)
+        if seg.ndim != 2:
+            raise ValueError(f"segmentation must be 2D, got {seg.shape}")
+        seg = np.clip(seg, 0, None)
+        color = np.asarray(color_rgb)
+        if color.shape[:2] != seg.shape:
+            raise ValueError("color_rgb shape mismatch segmentation")
+        # rgba8: channels order RGBA. Our color is RGB; map R<-R, G<-G, B<-B, A<-seg
+
+        rgba = np.stack([color_rgb[:, :, 0], color_rgb[:, :, 1], color_rgb[:, :, 2], seg.astype(np.uint8)], axis=-1).astype(np.uint8)
+        msg = self.bridge.cv2_to_imgmsg(rgba, encoding='rgba8')
+        if header is not None:
+            msg.header = header
+        return msg
 
 
     def _preprocess_to_trt_input(self, bgr_image):
@@ -371,48 +446,68 @@ class InternImageNode(Node):
             print("trt_shape:", trt_outputs[0].shape)
             print("trt_outputs[0] dtype:", trt_outputs[0].dtype)
 
-            segmentation = trt_outputs[0].reshape((300, 480))  # 600 960
+            segmentation = trt_outputs[0].reshape((300, 480))  # (H,W) 类别ID整型图 (模型输出分辨率)
             print("segmentation shape:", segmentation.shape)
             print("segmentation[0][0]:", segmentation[0][0])
 
             t3 = time.time_ns()
 
-            # Visualize segmentation projected onto original image and encode for publishing
-            try:
-                self._frame_idx += 1
-                if (self._frame_idx % self.publish_stride) == 0:
-                    print("Publishing overlay segmentation...")
-                    img_bytes, composed = overlay_segmentation_and_encode(
-                        segmentation,
-                        original_bgr=cv_image,
-                        palette=self._palette if self._palette else None,
-                        class_names=self.class_names if self.show_legend else None,
-                        alpha=self.overlay_alpha,
-                        merge_legend=self.show_legend,
-                        legend_placement='right',
-                        encode_format=self.output_format,
-                        jpeg_quality=self.jpeg_quality
-                    )
-                    print("Composed image shape:", composed.shape)
-                    t4 = time.time_ns()
-                    visualize_ms = (t4 - t3) / 1e6
-                    self.get_logger().info(f'Visualization time: {visualize_ms:.3f} ms')
+            # publish segmentation result 600 * 960 * 4 with zed
+            # segmentation info
+            target_h = self.combined_h
+            target_w = self.combined_w
+            if segmentation.shape != (target_h, target_w):
+                seg_resized = cv2.resize(segmentation.astype(np.int32), (target_w, target_h), interpolation=cv2.INTER_NEAREST)
+            else:
+                seg_resized = segmentation
+            # color info
+            color_mask = segmentation_to_color_image(seg_resized, palette=self._palette)
 
-                    # Publish as CompressedImage with original header if available
-                    out_msg = CompressedImage()
-                    if hasattr(msg, 'header'):
-                        out_msg.header = msg.header
-                    out_msg.format = 'jpeg' if self.output_format.lower() in ('jpg','jpeg') else 'png'
-                    out_msg.data = img_bytes
-                    self.internimage_pub.publish(out_msg)
+            if self.publish_combined:
+                try:
+                    combined_msg = self._combined_seg_color_msg(seg_resized, color_mask, header=getattr(msg, 'header', None))
+                    self.seg_pub.publish(combined_msg)
+                except Exception as ex:
+                    self.get_logger().error(f'publish combined array failed: {ex}')
 
-                    t5 = time.time_ns()
-                    publish_ms = (t5 - t4) / 1e6
-                    self.get_logger().info(f'Publish time: {publish_ms:.3f} ms')
+
             
 
-            except Exception as ex:
-                self.get_logger().error(f'Failed to visualize/publish overlay segmentation: {ex}')
+            # Visualize segmentation projected onto original image and encode for publishing
+            # try:
+            #     self._frame_idx += 1
+            #     if (self._frame_idx % self.publish_stride) == 0:
+            #         print("Publishing overlay segmentation...")
+            #         img_bytes, composed = overlay_segmentation_and_encode(
+            #             segmentation,
+            #             original_bgr=cv_image,
+            #             palette=self._palette if self._palette else None,
+            #             class_names=self.class_names if self.show_legend else None,
+            #             alpha=self.overlay_alpha,
+            #             merge_legend=self.show_legend,
+            #             legend_placement='right',
+            #             encode_format=self.output_format,
+            #             jpeg_quality=self.jpeg_quality
+            #         )
+            #         print("Composed image shape:", composed.shape)
+            #         t4 = time.time_ns()
+            #         visualize_ms = (t4 - t3) / 1e6
+            #         self.get_logger().info(f'Visualization time: {visualize_ms:.3f} ms')
+
+            #         # Publish as CompressedImage with original header if available
+            #         out_msg = CompressedImage()
+            #         if hasattr(msg, 'header'):
+            #             out_msg.header = msg.header
+            #         out_msg.format = 'jpeg' if self.output_format.lower() in ('jpg','jpeg') else 'png'
+            #         out_msg.data = img_bytes
+            #         self.internimage_pub.publish(out_msg)
+
+            #         t5 = time.time_ns()
+            #         publish_ms = (t5 - t4) / 1e6
+            #         self.get_logger().info(f'Publish time: {publish_ms:.3f} ms')
+            
+            # except Exception as ex:
+            #     self.get_logger().error(f'Failed to visualize/publish overlay segmentation: {ex}')
 
         except Exception as e:
             self.get_logger().error(f'Error during inference/publish: {e}')
