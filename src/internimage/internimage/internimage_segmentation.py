@@ -217,9 +217,16 @@ class InternImageNode(Node):
         self.image_sub = self.create_subscription(
             CompressedImage, self.image_topic, self.image_callback, sensor_qos
         )
-        self.declare_parameter("segmentation_topic", "/internimage/segmentation_mask")
-        self.segmentation_topic = self.get_parameter("segmentation_topic").get_parameter_value().string_value
-        self.seg_pub = self.create_publisher(Image, self.segmentation_topic, sensor_qos)
+        self.declare_parameter("color_segmentation_topic", "/internimage/color_segmentation_mask")
+        self.declare_parameter("id_segmentation_topic", "/internimage/id_segmentation_mask")
+        self.declare_parameter("combined_segmentation_topic", "/internimage/combined_segmentation_mask")
+        self.color_segmentation_topic = self.get_parameter("color_segmentation_topic").get_parameter_value().string_value
+        self.id_segmentation_topic = self.get_parameter("id_segmentation_topic").get_parameter_value().string_value
+        self.combined_segmentation_topic = self.get_parameter("combined_segmentation_topic").get_parameter_value().string_value
+        self.color_seg_pub = self.create_publisher(Image, self.color_segmentation_topic, sensor_qos)
+        self.id_seg_pub = self.create_publisher(Image, self.id_segmentation_topic, sensor_qos)
+        self.combined_seg_pub = self.create_publisher(CompressedImage, self.combined_segmentation_topic, sensor_qos)
+
         # Declare both spellings so either YAML key works.
         self.declare_parameter("color_palette_flat", [120,120,120, 180,120,120, 6,230,230, 80,50,50, 4,200,3, 120,120,80, 140,140,140, 204,5,255, 230,230,230, 4,250,7, 224,5,255, 235,255,7, 150,5,61, 120,120,70, 8,255,51, 255,6,82, 143,255,140, 204,255,4, 255,51,7, 204,70,3, 0,102,200, 61,230,250, 255,6,51, 11,102,255, 255,7,71, 255,9,224, 9,7,230, 220,220,220, 255,9,92, 112,9,255, 8,255,214, 7,255,224, 255,184,6, 10,255,71, 255,41,10, 7,255,255, 224,255,8, 102,8,255, 255,61,6, 255,194,7, 255,122,8, 0,255,20, 255,8,41, 255,5,153, 6,51,255, 235,12,255, 160,150,20, 0,163,255, 140,140,140, 250,10,15, 20,255,0, 31,255,0, 255,31,0, 255,224,0, 153,255,0, 0,0,255, 255,71,0, 0,235,255, 0,173,255, 31,0,255, 11,200,200, 255,82,0, 0,255,245, 0,61,255, 0,255,112, 0,255,133, 255,0,0, 255,163,0, 255,102,0, 194,255,0, 0,143,255, 51,255,0, 0,82,255, 0,255,41, 0,255,173, 10,0,255, 173,255,0, 0,255,153, 255,92,0, 255,0,255, 255,0,245, 255,0,102, 255,173,0, 255,0,20, 255,184,184, 0,31,255, 0,255,61, 0,71,255, 255,0,204, 0,255,194, 0,255,82, 0,10,255, 0,112,255, 51,0,255, 0,194,255, 0,122,255, 0,255,163, 255,153,0, 0,255,10, 255,112,0, 143,255,0, 82,0,255, 163,255,0, 255,235,0, 8,184,170, 133,0,255, 0,255,92, 184,0,255, 255,0,31, 0,184,255, 0,214,255, 255,0,112, 92,255,0, 0,224,255, 112,224,255, 70,184,160, 163,0,255, 153,0,255, 71,255,0, 255,0,163, 255,204,0, 255,0,143, 0,255,235, 133,255,0, 255,0,235, 245,0,255, 255,0,122, 255,245,0, 10,190,212, 214,255,0, 0,204,255, 20,0,255, 255,255,0, 0,153,255, 0,41,255, 0,255,204, 41,0,255, 41,255,0, 173,0,255, 0,245,255, 71,0,255, 122,0,255, 0,255,184, 0,92,255, 184,255,0, 0,133,255, 255,214,0, 25,194,194, 102,255,0, 92,0,255])  # common misspelling
         # Prefer correctly spelled; fallback to misspelled.
@@ -446,9 +453,24 @@ class InternImageNode(Node):
             if self.publish_combined:
                 try:
                     combined_msg = self._combined_seg_color_msg(seg_resized, color_mask, header=getattr(msg, 'header', None))
-                    self.seg_pub.publish(combined_msg)
+                    self.combined_seg_pub.publish(combined_msg)
                 except Exception as ex:
                     self.get_logger().error(f'publish combined array failed: {ex}')
+            else:
+                try:
+                    # Publish color segmentation mask
+                    color_msg = self.bridge.cv2_to_imgmsg(color_mask, encoding='rgb8')
+                    if hasattr(msg, 'header'):
+                        color_msg.header = msg.header
+                    self.color_seg_pub.publish(color_msg)
+                    id_msg = self.bridge.cv2_to_imgmsg(seg_resized.astype(np.uint8), encoding='mono8')
+                    if hasattr(msg, 'header'):
+                        id_msg.header = msg.header
+                    self.id_seg_pub.publish(id_msg)
+                except Exception as ex:
+                    self.get_logger().error(f'publish color segmentation failed: {ex}')
+
+
 
 
             
