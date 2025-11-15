@@ -74,12 +74,6 @@ def build_engine_onnx(model_file, save_path, logger):
     return runtime.deserialize_cuda_engine(serialized_engine)
 
 
-# def load_normalized_test_case(test_image, pagelocked_buffer):
-#     # Keep compatibility with previous API (accepts a path string).
-#     np.copyto(pagelocked_buffer, normalize_pil_image(Image.open(test_image).convert("RGB")))
-#     return test_image
-
-
 def _build_cv2_legend_panel(unique_ids, class_names, palette, font_scale=0.5, padding=8, swatch=16,
                             text_color=(0, 0, 0), bg_color=(255, 255, 255)):
     """Build a legend panel using OpenCV. Returns BGR image or None."""
@@ -113,69 +107,76 @@ def _build_cv2_legend_panel(unique_ids, class_names, palette, font_scale=0.5, pa
 
 
 def colorize_segmentation(segmentation, palette=None):
-    """Map segmentation ids to a BGR uint8 image."""
-    seg = segmentation.astype(np.int32)
+    """Map segmentation ids to a BGR uint8 image using a fast vectorized path."""
+    seg = segmentation.astype(np.int32, copy=False)
     h, w = seg.shape
-    if palette is None:
+    if palette is None or len(palette) == 0:
         cmap = plt.get_cmap('tab20')
         max_id = int(seg.max()) if seg.size else 0
         palette = [[int(255 * c) for c in cmap(i / max(1, max_id + 1))[:3]] for i in range(max_id + 1)]
-    color_img = np.zeros((h, w, 3), dtype=np.uint8)
-    unique = np.unique(seg)
-    for cid in unique:
-        if cid < 0:
-            continue
-        color = palette[cid] if cid < len(palette) else [0, 0, 0]
-        color_bgr = (int(color[2]), int(color[1]), int(color[0]))
-        mask = (seg == cid)
-        color_img[mask] = color_bgr
-    return color_img
+    P = np.asarray(palette, dtype=np.uint8)
+    if P.ndim != 2 or P.shape[1] != 3:
+        P = np.zeros((max(1, len(palette)), 3), dtype=np.uint8)
+    idx = np.clip(seg, 0, len(P) - 1)
+    rgb = P[idx]  # HxWx3 RGB
+    bgr = rgb[..., ::-1].copy()
+    return bgr
 
 
-def visualize_segmentation_and_encode(segmentation, palette=None, class_names=None, merge_legend=True, legend_placement='right'):
-    """Return PNG bytes and the composed BGR image for a segmentation map."""
-    color_img = colorize_segmentation(segmentation, palette=palette)
-    out_img = color_img
+def overlay_segmentation_and_encode(segmentation, original_bgr, palette=None, class_names=None,
+                                    alpha=0.5, merge_legend=False, legend_placement='right',
+                                    encode_format='jpeg', jpeg_quality=80):
+    """Overlay colorized segmentation onto the original image and return PNG bytes and BGR image.
+
+    Args:
+        segmentation: HxW (int) segmentation ids.
+        original_bgr: HxWx3 uint8 original image (BGR).
+        palette: List[List[int]] of RGB colors.
+        class_names: Optional list of class names for legend.
+        alpha: Blend factor for overlay (color mask alpha).
+        merge_legend: Whether to append a legend panel.
+        legend_placement: 'right' or 'bottom'.
+
+    Returns:
+        (png_bytes, out_bgr)
+    """
+    oh, ow = original_bgr.shape[:2]
+    sh, sw = segmentation.shape[:2]
+    if (sh, sw) != (oh, ow):
+        seg_resized = cv2.resize(segmentation.astype(np.int32), (ow, oh), interpolation=cv2.INTER_NEAREST)
+    else:
+        seg_resized = segmentation
+
+    color_mask = colorize_segmentation(seg_resized, palette=palette)
+    # Ensure uint8
+    if color_mask.dtype != np.uint8:
+        color_mask = color_mask.astype(np.uint8, copy=False)
+    overlay = cv2.addWeighted(original_bgr, 1.0 - alpha, color_mask, alpha, 0.0)
+
+    out_img = overlay
     if merge_legend and (class_names is not None):
-        panel = _build_cv2_legend_panel(np.unique(segmentation), class_names, palette)
+        panel = _build_cv2_legend_panel(np.unique(seg_resized), class_names, palette)
         if panel is not None:
-            ih, iw = color_img.shape[:2]
+            ih, iw = out_img.shape[:2]
             ph, pw = panel.shape[:2]
             if legend_placement == 'right':
                 new_pw = max(1, int(pw * (ih / ph)))
                 panel_resized = cv2.resize(panel, (new_pw, ih), interpolation=cv2.INTER_AREA)
-                out_img = np.concatenate([color_img, panel_resized], axis=1)
+                out_img = np.concatenate([out_img, panel_resized], axis=1)
             else:
                 new_ph = max(1, int(ph * (iw / pw)))
                 panel_resized = cv2.resize(panel, (iw, new_ph), interpolation=cv2.INTER_AREA)
-                out_img = np.concatenate([color_img, panel_resized], axis=0)
-    ok, buf = cv2.imencode('.png', out_img)
+                out_img = np.concatenate([out_img, panel_resized], axis=0)
+
+    # Encode with configurable format; prefer JPEG for speed/size
+    if encode_format.lower() in ('jpg', 'jpeg'):
+        ok, buf = cv2.imencode('.jpg', out_img, [int(cv2.IMWRITE_JPEG_QUALITY), int(jpeg_quality)])
+    else:
+        # Low compression for speed
+        ok, buf = cv2.imencode('.png', out_img, [int(cv2.IMWRITE_PNG_COMPRESSION), 1])
     if not ok:
-        raise RuntimeError('Failed to encode segmentation image')
+        raise RuntimeError('Failed to encode overlay image')
     return buf.tobytes(), out_img
-
-
-def normalize_pil_image(image):
-    """Normalize a PIL.Image to the model input layout and dtype.
-
-    Returns a flattened array in CHW order matching the TensorRT input buffer.
-    """
-    mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
-    std = np.array([58.395, 57.12, 57.375], dtype=np.float32)
-
-    c, h, w = ModelData.INPUT_SHAPE
-    image = np.asarray(image.resize((w, h), PILImage.LANCZOS), dtype=np.float32)
-    image = (image - mean) / std   # (w h c)
-    print("image after normalize shape:", image.shape)
-
-    image_arr = (
-        image
-        .transpose([2, 0, 1])  # (c h w) to (h w c)
-        .astype(trt.nptype(ModelData.DTYPE))
-        .ravel()
-    )
-    return image_arr
-
 
 class InternImageNode(Node):
     def __init__(self):
@@ -189,12 +190,9 @@ class InternImageNode(Node):
         self.declare_parameter("model_name","upernet_internimage_s_300x480_int8fp16")
         self.model_name = self.get_parameter("model_name").get_parameter_value().string_value
         self.declare_parameter("default_data_dir","/home/jetson/workspaces/segmentation_ws/models/internimage_s/")
-        default_data_dir = self.get_parameter('default_data_dir').get_parameter_value().string_value    
-        # self.declare_parameter("depth_topic")
-        # self.depth_topic = self.get_parameter("depth_topic").value
-        # self.depthImage_sub = self.create_subscription(
-        #     Image, self.depth_topic, self.depth_callback, sensor_qos
-        # )
+        default_data_dir = self.get_parameter('default_data_dir').get_parameter_value().string_value            
+        self.declare_parameter("depth_topic","/zed/zed_node/depth/depth_registered")
+        self.depth_topic = self.get_parameter("depth_topic").get_parameter_value().string_value  
         # 发布绘制后的图像
         self.internimage_pub = self.create_publisher(CompressedImage, self.result_topic, 10)
         # 使用传感器数据 QoS 以匹配相机数据特性
@@ -203,20 +201,65 @@ class InternImageNode(Node):
         self.image_sub = self.create_subscription(
             CompressedImage, self.image_topic, self.image_callback, sensor_qos
         )
-        # Read flattened color palette (RGB triplets flattened)
-        # YAML key should be 'color_palette_flat': [r0,g0,b0, r1,g1,b1, ...]
-        self.declare_parameter("color_palette_flat", [])
-        flat_palette = self.get_parameter("color_palette_flat").value
+        # Disabled by default; implement depth_callback before enabling to avoid runtime errors.
+        # self.depth_sub = self.create_subscription(
+        #     CompressedImage, self.depth_topic, self.depth_callback, sensor_qos
+        # )
+        # --- Load parameters: palette & classes with fallback spellings ---
+        # Declare both spellings so either YAML key works.
+        self.declare_parameter("color_palette_flat", [120,120,120, 180,120,120, 6,230,230, 80,50,50, 4,200,3, 120,120,80, 140,140,140, 204,5,255, 230,230,230, 4,250,7, 224,5,255, 235,255,7, 150,5,61, 120,120,70, 8,255,51, 255,6,82, 143,255,140, 204,255,4, 255,51,7, 204,70,3, 0,102,200, 61,230,250, 255,6,51, 11,102,255, 255,7,71, 255,9,224, 9,7,230, 220,220,220, 255,9,92, 112,9,255, 8,255,214, 7,255,224, 255,184,6, 10,255,71, 255,41,10, 7,255,255, 224,255,8, 102,8,255, 255,61,6, 255,194,7, 255,122,8, 0,255,20, 255,8,41, 255,5,153, 6,51,255, 235,12,255, 160,150,20, 0,163,255, 140,140,140, 250,10,15, 20,255,0, 31,255,0, 255,31,0, 255,224,0, 153,255,0, 0,0,255, 255,71,0, 0,235,255, 0,173,255, 31,0,255, 11,200,200, 255,82,0, 0,255,245, 0,61,255, 0,255,112, 0,255,133, 255,0,0, 255,163,0, 255,102,0, 194,255,0, 0,143,255, 51,255,0, 0,82,255, 0,255,41, 0,255,173, 10,0,255, 173,255,0, 0,255,153, 255,92,0, 255,0,255, 255,0,245, 255,0,102, 255,173,0, 255,0,20, 255,184,184, 0,31,255, 0,255,61, 0,71,255, 255,0,204, 0,255,194, 0,255,82, 0,10,255, 0,112,255, 51,0,255, 0,194,255, 0,122,255, 0,255,163, 255,153,0, 0,255,10, 255,112,0, 143,255,0, 82,0,255, 163,255,0, 255,235,0, 8,184,170, 133,0,255, 0,255,92, 184,0,255, 255,0,31, 0,184,255, 0,214,255, 255,0,112, 92,255,0, 0,224,255, 112,224,255, 70,184,160, 163,0,255, 153,0,255, 71,255,0, 255,0,163, 255,204,0, 255,0,143, 0,255,235, 133,255,0, 255,0,235, 245,0,255, 255,0,122, 255,245,0, 10,190,212, 214,255,0, 0,204,255, 20,0,255, 255,255,0, 0,153,255, 0,41,255, 0,255,204, 41,0,255, 41,255,0, 173,0,255, 0,245,255, 71,0,255, 122,0,255, 0,255,184, 0,92,255, 184,255,0, 0,133,255, 255,214,0, 25,194,194, 102,255,0, 92,0,255])  # common misspelling
+        # Prefer correctly spelled; fallback to misspelled.
+        palette_candidate = self.get_parameter("color_palette_flat").value
         self._palette = []
         try:
-            if isinstance(flat_palette, (list, tuple)) and (len(flat_palette) % 3 == 0):
-                it = iter(int(x) for x in flat_palette)
-                self._palette = [[next(it), next(it), next(it)] for _ in range(len(flat_palette)//3)]
-                self.get_logger().info(f"Loaded color palette with {len(self._palette)} colors")
-            elif flat_palette:
-                self.get_logger().warning(f"color_palette_flat length {len(flat_palette)} is not multiple of 3; ignoring palette")
+            if isinstance(palette_candidate, (list, tuple)) and palette_candidate:
+                if len(palette_candidate) % 3 != 0:
+                    self.get_logger().warning(
+                        f"Palette length {len(palette_candidate)} not multiple of 3; truncating extra values"
+                    )
+                triplet_count = len(palette_candidate) // 3
+                it = iter(int(x) for x in palette_candidate[:triplet_count * 3])
+                self._palette = [[next(it), next(it), next(it)] for _ in range(triplet_count)]
+                self.get_logger().info(f"Loaded palette with {triplet_count} colors (RGB)")
+            else:
+                self.get_logger().info("No palette provided; will auto-generate if needed")
         except Exception as e:
-            self.get_logger().warning(f"Failed to parse color_palette_flat: {e}")
+            self.get_logger().warning(f"Failed to parse palette: {e}")
+
+        # declare both spellings so either YAML key works.
+        self.declare_parameter("classes", ['wall', 'building', 'sky', 'floor', 'tree', 'ceiling', 'road', 'bed ', 'windowpane', 'grass', 'cabinet', 'sidewalk', 'person', 'earth', 'door', 'table', 'mountain', 'plant', 'curtain', 'chair', 'car', 'water', 'painting', 'sofa', 'shelf', 'house', 'sea', 'mirror', 'rug', 'field', 'armchair', 'seat', 'fence', 'desk', 'rock', 'wardrobe', 'lamp', 'bathtub', 'railing', 'cushion', 'base', 'box', 'column', 'signboard', 'chest of drawers', 'counter', 'sand', 'sink', 'skyscraper', 'fireplace', 'refrigerator', 'grandstand', 'path', 'stairs', 'runway', 'case', 'pool table', 'pillow', 'screen door', 'stairway', 'river', 'bridge', 'bookcase', 'blind', 'coffee table', 'toilet', 'flower', 'book', 'hill', 'bench', 'countertop', 'stove', 'palm', 'kitchen island', 'computer', 'swivel chair', 'boat', 'bar', 'arcade machine', 'hovel', 'bus', 'towel', 'light', 'truck', 'tower', 'chandelier', 'awning', 'streetlight', 'booth', 'television receiver', 'airplane', 'dirt track', 'apparel', 'pole', 'land', 'bannister', 'escalator', 'ottoman', 'bottle', 'buffet', 'poster', 'stage', 'van', 'ship', 'fountain', 'conveyer belt', 'canopy', 'washer', 'plaything', 'swimming pool', 'stool', 'barrel', 'basket', 'waterfall', 'tent', 'bag', 'minibike', 'cradle', 'oven', 'ball', 'food', 'step', 'tank', 'trade name', 'microwave', 'pot', 'animal', 'bicycle', 'lake', 'dishwasher', 'screen', 'blanket', 'sculpture', 'hood', 'sconce', 'vase', 'traffic light', 'tray', 'ashcan', 'fan', 'pier', 'crt screen', 'plate', 'monitor', 'bulletin board', 'shower', 'radiator', 'glass', 'clock', 'flag'])
+        classes_candidate = self.get_parameter("classes").value
+        self.class_names = None
+        try:
+            if isinstance(classes_candidate, (list, tuple)) and classes_candidate:
+                self.class_names = [str(x) for x in classes_candidate]
+                self.get_logger().info(f"Loaded {len(self.class_names)} class names")
+            else:
+                self.get_logger().info("No class names provided; legend will be omitted")
+        except Exception as e:
+            self.get_logger().warning(f"Failed to parse class names: {e}")
+
+        # Runtime visualization/publish tuning parameters
+        self.declare_parameter('show_legend', False)
+        self.declare_parameter('overlay_alpha', 0.5)
+        self.declare_parameter('publish_stride', 1)
+        self.declare_parameter('output_format', 'jpeg')  # 'jpeg' or 'png'
+        self.declare_parameter('jpeg_quality', 80)
+
+        self.show_legend = bool(self.get_parameter('show_legend').value)
+        self.overlay_alpha = float(self.get_parameter('overlay_alpha').value)
+        self.publish_stride = max(1, int(self.get_parameter('publish_stride').value))
+        self.output_format = str(self.get_parameter('output_format').value)
+        self.jpeg_quality = int(self.get_parameter('jpeg_quality').value)
+
+        # Debug summary (concise)
+        if self._palette:
+            self.get_logger().debug(f"First palette color: {self._palette[0]}")
+        if self.class_names:
+            self.get_logger().debug(f"First class name: {self.class_names[0]}")
+
+        # Frame counter for stride-based publishing
+        self._frame_idx = 0
 
         onnx_model_file = default_data_dir + self.model_name + '.onnx'
 
@@ -309,7 +352,7 @@ class InternImageNode(Node):
             self._preprocess_to_trt_input(cv_image)
             t2 = time.time_ns()
             preprocess_ms = (t2 - t1) / 1e6
-            # self.get_logger().info(f'Preprocess time: {preprocess_ms:.3f} ms') check
+            self.get_logger().info(f'Preprocess time: {preprocess_ms:.3f} ms') 
 
 
             start_ns = time.time_ns()
@@ -332,27 +375,44 @@ class InternImageNode(Node):
             print("segmentation shape:", segmentation.shape)
             print("segmentation[0][0]:", segmentation[0][0])
 
-            # Visualize segmentation (colorize + optional legend) and encode to PNG
+            t3 = time.time_ns()
 
-            # TODO: 20ms
+            # Visualize segmentation projected onto original image and encode for publishing
             try:
-                png_bytes, composed = visualize_segmentation_and_encode(
-                    segmentation,
-                    palette=self._palette if self._palette else None,
-                    class_names=getattr(self, 'class_names', None),
-                    merge_legend=True,
-                    legend_placement='right'
-                )
+                self._frame_idx += 1
+                if (self._frame_idx % self.publish_stride) == 0:
+                    print("Publishing overlay segmentation...")
+                    img_bytes, composed = overlay_segmentation_and_encode(
+                        segmentation,
+                        original_bgr=cv_image,
+                        palette=self._palette if self._palette else None,
+                        class_names=self.class_names if self.show_legend else None,
+                        alpha=self.overlay_alpha,
+                        merge_legend=self.show_legend,
+                        legend_placement='right',
+                        encode_format=self.output_format,
+                        jpeg_quality=self.jpeg_quality
+                    )
+                    print("Composed image shape:", composed.shape)
+                    t4 = time.time_ns()
+                    visualize_ms = (t4 - t3) / 1e6
+                    self.get_logger().info(f'Visualization time: {visualize_ms:.3f} ms')
 
-                # Publish as CompressedImage with PNG bytes
-                msg = CompressedImage()
-                msg.format = 'png'
-                msg.data = png_bytes
-                self.internimage_pub.publish(msg)
-                print("Published segmentation image.")
+                    # Publish as CompressedImage with original header if available
+                    out_msg = CompressedImage()
+                    if hasattr(msg, 'header'):
+                        out_msg.header = msg.header
+                    out_msg.format = 'jpeg' if self.output_format.lower() in ('jpg','jpeg') else 'png'
+                    out_msg.data = img_bytes
+                    self.internimage_pub.publish(out_msg)
+
+                    t5 = time.time_ns()
+                    publish_ms = (t5 - t4) / 1e6
+                    self.get_logger().info(f'Publish time: {publish_ms:.3f} ms')
+            
 
             except Exception as ex:
-                self.get_logger().error(f'Failed to visualize/publish segmentation: {ex}')
+                self.get_logger().error(f'Failed to visualize/publish overlay segmentation: {ex}')
 
         except Exception as e:
             self.get_logger().error(f'Error during inference/publish: {e}')
@@ -360,6 +420,7 @@ class InternImageNode(Node):
         t1 = time.time_ns()
         elapsed_ms = (t1 - t0) / 1e6
         self.get_logger().info(f'Total callback time: {elapsed_ms:.3f} ms')
+
 
     def destroy_node(self):
         # Try to free buffers
