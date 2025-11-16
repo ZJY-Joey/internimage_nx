@@ -58,13 +58,13 @@ def generate_launch_description():
                 # Driver itself
                 launch_ros.descriptions.ComposableNode(
                     package='depth_image_proc',
-                    plugin='depth_image_proc::PointCloudXyzrgbNode',
-                    name='point_cloud_xyzrgb_node',
+                    plugin='depth_image_proc::PointCloudXyzrgbLabelNode',
+                    name='point_cloud_xyzrgb_label_node',
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
                                 ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
                                 ('id/image_rect_id', '/internimage/id_segmentation_mask'),
                                 ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered'),
-                                ('points', '/zed/zed_node/projected/points')]
+                                ('points', '/zed/zed_node/segmentation/projected/points')]
                 ),
             ],
             output='screen',

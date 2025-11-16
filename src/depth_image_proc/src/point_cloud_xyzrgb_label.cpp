@@ -61,6 +61,7 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
       ExactSyncPolicy(queue_size),
       sub_depth_,
       sub_rgb_,
+      sub_id_,
       sub_info_);
     exact_sync_->registerCallback(
       std::bind(
@@ -68,16 +69,18 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
         this,
         std::placeholders::_1,
         std::placeholders::_2,
-        std::placeholders::_3));
+        std::placeholders::_3,
+        std::placeholders::_4));
   } else {
-    sync_ = std::make_shared<Synchronizer>(SyncPolicy(queue_size), sub_depth_, sub_rgb_, sub_info_);
+    sync_ = std::make_shared<Synchronizer>(SyncPolicy(queue_size), sub_depth_, sub_rgb_, sub_id_, sub_info_);
     sync_->registerCallback(
       std::bind(
         &PointCloudXyzrgbLabelNode::imageCb,
         this,
         std::placeholders::_1,
         std::placeholders::_2,
-        std::placeholders::_3));
+        std::placeholders::_3,
+        std::placeholders::_4));
   }
 
   // Monitor whether anyone is subscribed to the output
@@ -103,6 +106,7 @@ void PointCloudXyzrgbLabelNode::connectCb()
     // TODO(ros2) Implement getNumSubscribers when rcl/rmw support it
     sub_depth_.unsubscribe();
     sub_rgb_.unsubscribe();
+    sub_id_.unsubscribe();
     sub_info_.unsubscribe();
   } else if (!sub_depth_.getSubscriber()) {
     // parameter for depth_image_transport hint
@@ -125,21 +129,29 @@ void PointCloudXyzrgbLabelNode::connectCb()
       this, "depth_registered/image_rect",
       depth_hints.getTransport(), rmw_qos_profile_default, sub_opts);
 
-    // rgb uses normal ros transport hints.
-    image_transport::TransportHints hints(this, "raw");
+    // rgb uses color ros transport hints.
+    image_transport::TransportHints color_hints(this, "raw");
     sub_rgb_.subscribe(
       this, "rgb/image_rect_color",
-      hints.getTransport(), rmw_qos_profile_default, sub_opts);
+      color_hints.getTransport(), rmw_qos_profile_default, sub_opts);
     sub_info_.subscribe(this, "rgb/camera_info");
+
+    //id uses label ros transport hints.
+    image_transport::TransportHints id_hints(this, "raw");
+    sub_id_.subscribe(
+        this, "id/image_rect_id",
+        id_hints.getTransport(), rmw_qos_profile_default, sub_opts);
+
   }
 }
 
 void PointCloudXyzrgbLabelNode::imageCb(
   const Image::ConstSharedPtr & depth_msg,
   const Image::ConstSharedPtr & rgb_msg_in,
+  const Image::ConstSharedPtr & id_msg_in,
   const CameraInfo::ConstSharedPtr & info_msg)
 {
-  // Check for bad inputs
+  // Check for bad inputs of color image
   if (depth_msg->header.frame_id != rgb_msg_in->header.frame_id) {
     RCLCPP_WARN_THROTTLE(
       get_logger(),
@@ -149,10 +161,20 @@ void PointCloudXyzrgbLabelNode::imageCb(
       depth_msg->header.frame_id.c_str(), rgb_msg_in->header.frame_id.c_str());
   }
 
+  // check for bad inputs of id image
+  if (depth_msg->header.frame_id != id_msg_in->header.frame_id) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(),
+      *get_clock(),
+      10000,  // 10 seconds
+      "Depth image frame id [%s] doesn't match ID image frame id [%s]",
+      depth_msg->header.frame_id.c_str(), id_msg_in->header.frame_id.c_str());
+  }
+
   // Update camera model
   model_.fromCameraInfo(info_msg);
 
-  // Check if the input image has to be resized
+  // Check if the input color image has to be resized
   Image::ConstSharedPtr rgb_msg = rgb_msg_in;
   if (depth_msg->width != rgb_msg->width || depth_msg->height != rgb_msg->height) {
     CameraInfo info_msg_tmp = *info_msg;
@@ -200,8 +222,46 @@ void PointCloudXyzrgbLabelNode::imageCb(
     rgb_msg = rgb_msg_in;
   }
 
+  // check if the input id image has to be resized
+  Image::ConstSharedPtr id_msg = id_msg_in;
+  if(depth_msg->width != id_msg->width || depth_msg->height != id_msg->height) {
+
+    float ratio = static_cast<float>(depth_msg->width) / static_cast<float>(id_msg->width);
+
+    cv_bridge::CvImageConstPtr cv_ptr;
+    try {
+      cv_ptr = cv_bridge::toCvShare(id_msg, id_msg->encoding);
+    } catch (cv_bridge::Exception & e) {
+      RCLCPP_ERROR(get_logger(), "cv_bridge exception: %s", e.what());
+      return;
+    }
+    cv_bridge::CvImage cv_rsz;
+    cv_rsz.header = cv_ptr->header;
+    cv_rsz.encoding = cv_ptr->encoding;
+    cv::resize(
+      cv_ptr->image.rowRange(0, depth_msg->height / ratio), cv_rsz.image,
+      cv::Size(depth_msg->width, depth_msg->height));
+    if ((id_msg->encoding == sensor_msgs::image_encodings::RGB8) ||
+      (id_msg->encoding == sensor_msgs::image_encodings::BGR8) ||
+      (id_msg->encoding == sensor_msgs::image_encodings::MONO8)) {
+      id_msg = cv_rsz.toImageMsg();
+    } else {
+      id_msg =
+        cv_bridge::toCvCopy(cv_rsz.toImageMsg(), sensor_msgs::image_encodings::MONO8)->toImageMsg();
+    }
+
+    RCLCPP_ERROR(
+      get_logger(), "Depth resolution (%ux%u) does not match ID resolution (%ux%u)",
+      depth_msg->width, depth_msg->height, id_msg->width, id_msg->height);
+    return;
+  } else {
+    id_msg = id_msg_in;
+  }
+
   // Supported color encodings: RGB8, BGR8, MONO8
   int red_offset, green_offset, blue_offset, color_step;
+  //TODO: support encodings is RGB8
+  std::cout<<"rgb_msg encoding: "<<rgb_msg->encoding<<std::endl;
   if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
     red_offset = 0;
     green_offset = 1;

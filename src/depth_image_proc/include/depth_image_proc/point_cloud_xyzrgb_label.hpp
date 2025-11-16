@@ -64,12 +64,12 @@ private:
   using CameraInfo = sensor_msgs::msg::CameraInfo;
 
   // Subscriptions
-  image_transport::SubscriberFilter sub_depth_, sub_rgb_;
+  image_transport::SubscriberFilter sub_depth_, sub_rgb_, sub_id_;
   message_filters::Subscriber<CameraInfo> sub_info_;
   using SyncPolicy =
-    message_filters::sync_policies::ApproximateTime<Image, Image, CameraInfo>;
+    message_filters::sync_policies::ApproximateTime<Image, Image, Image, CameraInfo>;
   using ExactSyncPolicy =
-    message_filters::sync_policies::ExactTime<Image, Image, CameraInfo>;
+    message_filters::sync_policies::ExactTime<Image, Image, Image, CameraInfo>;
   using Synchronizer = message_filters::Synchronizer<SyncPolicy>;
   using ExactSynchronizer = message_filters::Synchronizer<ExactSyncPolicy>;
   std::shared_ptr<Synchronizer> sync_;
@@ -86,9 +86,10 @@ private:
   void imageCb(
     const Image::ConstSharedPtr & depth_msg,
     const Image::ConstSharedPtr & rgb_msg,
+    const Image::ConstSharedPtr & id_msg,
     const CameraInfo::ConstSharedPtr & info_msg);
 };
 
 }  // namespace depth_image_proc
 
-#endif  // DEPTH_IMAGE_PROC__POINT_CLOUD_XYZRGB_HPP_
+#endif  // DEPTH_IMAGE_PROC__POINT_CLOUD_XYZRGB_LABEL_HPP_
