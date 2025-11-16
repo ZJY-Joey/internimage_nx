@@ -64,7 +64,7 @@ def generate_launch_description():
                                 ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
                                 ('id/image_rect_id', '/internimage/id_segmentation_mask'),
                                 ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered'),
-                                ('points', '/zed/zed_node/segmentation/projected/points')]
+                                ('points', '/internimage/segmentation/projected/points')]
                 ),
             ],
             output='screen',

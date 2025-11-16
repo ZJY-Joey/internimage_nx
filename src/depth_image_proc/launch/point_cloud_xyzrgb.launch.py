@@ -44,9 +44,9 @@ def generate_launch_description():
                                 'launch', 'rviz/point_cloud_xyzrgb.rviz')
     return LaunchDescription([
         # install realsense from https://github.com/intel/ros2_intel_realsense
-        launch_ros.actions.Node(
-            package='realsense_ros2_camera', node_executable='realsense_ros2_camera',
-            output='screen'),
+        # launch_ros.actions.Node(
+        #     package='realsense_ros2_camera', executable='realsense_ros2_camera',
+        #     output='screen'),
 
         # launch plugin through rclcpp_components container
         launch_ros.actions.ComposableNodeContainer(
@@ -60,18 +60,23 @@ def generate_launch_description():
                     package='depth_image_proc',
                     plugin='depth_image_proc::PointCloudXyzrgbNode',
                     name='point_cloud_xyzrgb_node',
-                    remappings=[('rgb/camera_info', '/camera/color/camera_info'),
-                                ('rgb/image_rect_color', '/camera/color/image_raw'),
+                    remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
+                                ('rgb/image_rect_color', '/internimage/color_segmentation_mask'), # /zed/zed_node/rgb/color/rect/image
                                 ('depth_registered/image_rect',
-                                 '/camera/aligned_depth_to_color/image_raw'),
-                                ('points', '/camera/depth_registered/points')]
+                                 '/zed/zed_node/depth/depth_registered'),
+                                ('points', '/internimage/segmentation/projected/points')]
+                    # remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
+                    #             ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
+                    #             ('id/image_rect_id', '/internimage/id_segmentation_mask'),
+                    #             ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered'),
+                    #             ('points', '/zed/zed_node/segmentation/projected/points')]
                 ),
             ],
             output='screen',
         ),
 
         # rviz
-        launch_ros.actions.Node(
-            package='rviz2', node_executable='rviz2', output='screen',
-            arguments=['--display-config', default_rviz]),
+        # launch_ros.actions.Node(
+        #     package='rviz2', executable='rviz2', output='screen',
+        #     arguments=['--display-config', default_rviz]),
     ])

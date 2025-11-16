@@ -18,7 +18,7 @@ from cv_bridge import CvBridge
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CompressedImage
-from rclpy.qos import QoSPresetProfiles
+from rclpy.qos import QoSPresetProfiles, QoSProfile, QoSReliabilityPolicy
 
 # Use non-interactive backend for matplotlib when saving images
 import matplotlib
@@ -30,6 +30,7 @@ sys.path.append('/usr/src/tensorrt/samples/python')
 import common
 import cv2
 from PIL import Image as PILImage
+
 
 
 class ModelData(object):
@@ -214,6 +215,9 @@ class InternImageNode(Node):
         # publish internimage result topic
         self.internimage_pub = self.create_publisher(CompressedImage, self.result_topic, 10)
         sensor_qos = QoSPresetProfiles.SENSOR_DATA.value
+        # Use RELIABLE QoS for segmentation image publishers to be compatible with subscribers
+        reliable_qos = QoSProfile(depth=10)
+        reliable_qos.reliability = QoSReliabilityPolicy.RELIABLE
         self.image_sub = self.create_subscription(
             CompressedImage, self.image_topic, self.image_callback, sensor_qos
         )
@@ -223,9 +227,10 @@ class InternImageNode(Node):
         self.color_segmentation_topic = self.get_parameter("color_segmentation_topic").get_parameter_value().string_value
         self.id_segmentation_topic = self.get_parameter("id_segmentation_topic").get_parameter_value().string_value
         self.combined_segmentation_topic = self.get_parameter("combined_segmentation_topic").get_parameter_value().string_value
-        self.color_seg_pub = self.create_publisher(Image, self.color_segmentation_topic, 10)
-        self.id_seg_pub = self.create_publisher(Image, self.id_segmentation_topic,10)
-        self.combined_seg_pub = self.create_publisher(CompressedImage, self.combined_segmentation_topic,10)
+        self.color_seg_pub = self.create_publisher(Image, self.color_segmentation_topic, reliable_qos)
+        self.id_seg_pub = self.create_publisher(Image, self.id_segmentation_topic, reliable_qos)
+        # Combined publishes a raw RGBA Image (not CompressedImage)
+        self.combined_seg_pub = self.create_publisher(Image, self.combined_segmentation_topic, reliable_qos)
 
         # Declare both spellings so either YAML key works.
         self.declare_parameter("color_palette_flat", [120,120,120, 180,120,120, 6,230,230, 80,50,50, 4,200,3, 120,120,80, 140,140,140, 204,5,255, 230,230,230, 4,250,7, 224,5,255, 235,255,7, 150,5,61, 120,120,70, 8,255,51, 255,6,82, 143,255,140, 204,255,4, 255,51,7, 204,70,3, 0,102,200, 61,230,250, 255,6,51, 11,102,255, 255,7,71, 255,9,224, 9,7,230, 220,220,220, 255,9,92, 112,9,255, 8,255,214, 7,255,224, 255,184,6, 10,255,71, 255,41,10, 7,255,255, 224,255,8, 102,8,255, 255,61,6, 255,194,7, 255,122,8, 0,255,20, 255,8,41, 255,5,153, 6,51,255, 235,12,255, 160,150,20, 0,163,255, 140,140,140, 250,10,15, 20,255,0, 31,255,0, 255,31,0, 255,224,0, 153,255,0, 0,0,255, 255,71,0, 0,235,255, 0,173,255, 31,0,255, 11,200,200, 255,82,0, 0,255,245, 0,61,255, 0,255,112, 0,255,133, 255,0,0, 255,163,0, 255,102,0, 194,255,0, 0,143,255, 51,255,0, 0,82,255, 0,255,41, 0,255,173, 10,0,255, 173,255,0, 0,255,153, 255,92,0, 255,0,255, 255,0,245, 255,0,102, 255,173,0, 255,0,20, 255,184,184, 0,31,255, 0,255,61, 0,71,255, 255,0,204, 0,255,194, 0,255,82, 0,10,255, 0,112,255, 51,0,255, 0,194,255, 0,122,255, 0,255,163, 255,153,0, 0,255,10, 255,112,0, 143,255,0, 82,0,255, 163,255,0, 255,235,0, 8,184,170, 133,0,255, 0,255,92, 184,0,255, 255,0,31, 0,184,255, 0,214,255, 255,0,112, 92,255,0, 0,224,255, 112,224,255, 70,184,160, 163,0,255, 153,0,255, 71,255,0, 255,0,163, 255,204,0, 255,0,143, 0,255,235, 133,255,0, 255,0,235, 245,0,255, 255,0,122, 255,245,0, 10,190,212, 214,255,0, 0,204,255, 20,0,255, 255,255,0, 0,153,255, 0,41,255, 0,255,204, 41,0,255, 41,255,0, 173,0,255, 0,245,255, 71,0,255, 122,0,255, 0,255,184, 0,92,255, 184,255,0, 0,133,255, 255,214,0, 25,194,194, 102,255,0, 92,0,255])  # common misspelling
@@ -267,7 +272,7 @@ class InternImageNode(Node):
         self.declare_parameter('output_format', 'jpeg')  # 'jpeg' or 'png'
         self.declare_parameter('jpeg_quality', 80)
         # Combined matrix publish control (segmentation + color)
-        self.declare_parameter('publish_combined', True)
+        self.declare_parameter('publish_combined', False)
         self.declare_parameter('combined_target_height', 600)
         self.declare_parameter('combined_target_width', 960)
         self.declare_parameter('trt_h', 300)
@@ -292,6 +297,8 @@ class InternImageNode(Node):
         self._mean = np.array(self.mean, dtype=np.float32)  # RGB
         self._inv_std = np.array([1.0/s for s in self.std], dtype=np.float32)  # RGB
         self.visualize_image_en = bool(self.get_parameter('visualize_image_en').value)
+        # Warn only once if ID range exceeds mono8 capability
+        self._warned_id_overflow = False
 
 
         # Debug summary (concise)
@@ -439,31 +446,61 @@ class InternImageNode(Node):
 
             t3 = time.time_ns()
 
-            # publish segmentation result 600 * 960 * 4 with zed
-            # segmentation info
+            # Publish segmentation outputs
+            # 1) Native resolution (match incoming RGB for compatibility with depth_image_proc)
+            in_h, in_w = cv_image.shape[:2]
+            if segmentation.shape != (in_h, in_w):
+                seg_native = cv2.resize(segmentation.astype(np.int32), (in_w, in_h), interpolation=cv2.INTER_NEAREST)
+            else:
+                seg_native = segmentation
+
+            # 2) Combined resolution (for optional combined RGBA output)
             target_h = self.combined_h
             target_w = self.combined_w
-            if segmentation.shape != (target_h, target_w):
-                seg_resized = cv2.resize(segmentation.astype(np.int32), (target_w, target_h), interpolation=cv2.INTER_NEAREST)
+            if (in_h, in_w) == (target_h, target_w):
+                seg_combined = seg_native
+            elif segmentation.shape == (target_h, target_w):
+                seg_combined = segmentation
             else:
-                seg_resized = segmentation
-            # color info
-            color_mask = segmentation_to_color_image(seg_resized, palette=self._palette)
+                seg_combined = cv2.resize(seg_native.astype(np.int32), (target_w, target_h), interpolation=cv2.INTER_NEAREST)
 
             if self.publish_combined:
                 try:
-                    combined_msg = self._combined_seg_color_msg(seg_resized, color_mask, header=getattr(msg, 'header', None))
+                    color_combined = segmentation_to_color_image(seg_combined, palette=self._palette)
+                    # self.get_logger().info(f'Color combined shape: {color_combined.shape}')  # (600, 960, 3)
+                    combined_msg = self._combined_seg_color_msg(seg_combined, color_combined, header=getattr(msg, 'header', None))
                     self.combined_seg_pub.publish(combined_msg)
                 except Exception as ex:
                     self.get_logger().error(f'publish combined array failed: {ex}')
             else:
                 try:
-                    # Publish color segmentation mask
-                    color_msg = self.bridge.cv2_to_imgmsg(color_mask, encoding='rgb8')
+                    # Publish color segmentation mask at native resolution for depth_image_proc
+                    color_native = segmentation_to_color_image(seg_native, palette=self._palette)
+                    # Convert RGB (HxWx3) -> BGRA (HxWx4) with opaque alpha channel and publish as 'bgra8'
+                    try:
+                        # Preferred: use OpenCV conversion (handles dtype and channel order)
+                        bgra_native = cv2.cvtColor(color_native, cv2.COLOR_RGB2BGRA)
+                    except Exception:
+                        # Fallback: manually build BGRA from RGB
+                        alpha = np.full((color_native.shape[0], color_native.shape[1], 1), 255, dtype=np.uint8)
+                        # Convert RGB -> BGR then append alpha
+                        bgra_native = np.concatenate([color_native[:, :, ::-1], alpha], axis=-1)
+                    bgra_native = bgra_native.astype(np.uint8, copy=False)
+                    color_msg = self.bridge.cv2_to_imgmsg(bgra_native, encoding='bgra8')
                     if hasattr(msg, 'header'):
                         color_msg.header = msg.header
                     self.color_seg_pub.publish(color_msg)
-                    id_msg = self.bridge.cv2_to_imgmsg(seg_resized.astype(np.uint8), encoding='mono8')
+
+                    # Publish ID mask as mono8 (warn if overflow)
+                    max_id = int(seg_native.max()) if seg_native.size else 0
+                    if max_id > 255 and not self._warned_id_overflow:
+                        self.get_logger().warning(
+                            'Segmentation IDs exceed 255; mono8 will overflow. '
+                            'Consider using the combined RGBA topic or a 16UC1 ID image.'
+                        )
+                        self._warned_id_overflow = True
+                    id_u8 = np.clip(seg_native, 0, 255).astype(np.uint8, copy=False)
+                    id_msg = self.bridge.cv2_to_imgmsg(id_u8, encoding='mono8')
                     if hasattr(msg, 'header'):
                         id_msg.header = msg.header
                     self.id_seg_pub.publish(id_msg)

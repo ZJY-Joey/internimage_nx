@@ -32,6 +32,7 @@
 #include <depth_image_proc/conversions.hpp>
 
 #include <limits>
+#include <cstring>
 #include <vector>
 
 namespace depth_image_proc
@@ -97,4 +98,97 @@ void convertRgb(
     }
   }
 }
+
+// add chanel of label
+void convertRgbLabel(
+  const sensor_msgs::msg::Image::ConstSharedPtr & rgb_msg,
+  const sensor_msgs::msg::Image::ConstSharedPtr & id_msg,
+  sensor_msgs::msg::PointCloud2::SharedPtr & cloud_msg,
+  int red_offset, int green_offset, int blue_offset, int color_step)
+{
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_r(*cloud_msg, "r");
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_g(*cloud_msg, "g");
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_b(*cloud_msg, "b");
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_label(*cloud_msg, "label");
+  const uint8_t * rgb = &rgb_msg->data[0];
+  const uint8_t * id_ptr = &id_msg->data[0];
+
+  // Compute per-row skips to account for potential padding
+  int rgb_skip = rgb_msg->step - rgb_msg->width * color_step;
+  // Best-effort bytes-per-pixel for id image (supports 8U/16U/32S typical encodings)
+  int id_pixel_step = static_cast<int>(id_msg->step / id_msg->width);
+  if (id_pixel_step <= 0) {
+    id_pixel_step = 1;  // fallback for safety
+  }
+  int id_skip = static_cast<int>(id_msg->step - id_msg->width * id_pixel_step);
+
+  // Iterate pixels and fill rgb + label
+  for (int v = 0; v < static_cast<int>(cloud_msg->height); ++v, rgb += rgb_skip, id_ptr += id_skip) {
+    for (int u = 0; u < static_cast<int>(cloud_msg->width); ++u,
+      rgb += color_step, id_ptr += id_pixel_step, ++iter_r, ++iter_g, ++iter_b, ++iter_label)
+    {
+      // RGB channels
+      *iter_r = rgb[red_offset];
+      *iter_g = rgb[green_offset];
+      *iter_b = rgb[blue_offset];
+
+      // Semantic label
+      uint8_t label_value = 0;
+      if (id_pixel_step == 1) {
+        label_value = id_ptr[0];
+      } else if (id_pixel_step == 2) {
+        uint16_t v16 = 0;
+        std::memcpy(&v16, id_ptr, sizeof(uint16_t));
+        label_value = static_cast<uint8_t>(v16);
+      } else if (id_pixel_step >= 4) {
+        // Covers 32-bit integer labels; truncate to 8-bit as classes < 155
+        uint32_t v32 = 0;
+        std::memcpy(&v32, id_ptr, sizeof(uint32_t));
+        label_value = static_cast<uint8_t>(v32);
+      }
+      *iter_label = label_value;
+    }
+  }
+}
+
+
+void convertLabel(
+  const sensor_msgs::msg::Image::ConstSharedPtr & id_msg,
+  sensor_msgs::msg::PointCloud2::SharedPtr & cloud_msg)
+{
+  sensor_msgs::PointCloud2Iterator<float> iter_label(*cloud_msg, "label");
+  const uint8_t * id_ptr = &id_msg->data[0];
+
+  int id_pixel_step = static_cast<int>(id_msg->step / id_msg->width);
+  if (id_pixel_step <= 0) {
+    id_pixel_step = 1;  // fallback for safety
+  }
+  int id_skip = static_cast<int>(id_msg->step - id_msg->width * id_pixel_step);
+
+  for (int v = 0; v < static_cast<int>(cloud_msg->height); ++v, id_ptr += id_skip ) {
+    for (int u = 0; u < static_cast<int>(cloud_msg->width); ++u, id_ptr += id_pixel_step, ++iter_label) {
+      // Semantic label
+      uint8_t label_value = 0;
+      if (id_pixel_step == 1) {
+        label_value = id_ptr[0];
+      } else if (id_pixel_step == 2) {
+        uint16_t v16 = 0;
+        std::memcpy(&v16, id_ptr, sizeof(uint16_t));
+        label_value = static_cast<uint8_t>(v16);
+      } else if (id_pixel_step >= 4) {
+        // Covers 32-bit integer labels; truncate to 8-bit as classes < 155
+        uint32_t v32 = 0;
+        std::memcpy(&v32, id_ptr, sizeof(uint32_t));
+        label_value = static_cast<uint8_t>(v32);
+      }
+      *iter_label = label_value;
+    }
+  }
+}
+
+
+
+
+
+
 }  // namespace depth_image_proc

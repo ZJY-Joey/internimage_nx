@@ -52,8 +52,10 @@ PointCloudXyzrgbNode::PointCloudXyzrgbNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("PointCloudXyzrgbNode", options)
 {
   // Read parameters
-  int queue_size = this->declare_parameter<int>("queue_size", 5);
+  int queue_size = this->declare_parameter<int>("queue_size", 10);
   bool use_exact_sync = this->declare_parameter<bool>("exact_sync", false);
+    // If true, subscribe to rgb topic with RELIABLE QoS (useful when remapped to segmentation publisher)
+  // bool rgb_reliable_ = this->declare_parameter<bool>("rgb_reliable", false);
 
   // Synchronize inputs. Topic subscriptions happen on demand in the connection callback.
   if (use_exact_sync) {
@@ -130,7 +132,13 @@ void PointCloudXyzrgbNode::connectCb()
     sub_rgb_.subscribe(
       this, "rgb/image_rect_color",
       hints.getTransport(), rmw_qos_profile_default, sub_opts);
-    sub_info_.subscribe(this, "rgb/camera_info");
+    RCLCPP_INFO(get_logger(), "Subscribing rgb: '%s' (Reliable QoS - for segmentation publishers)",
+      (get_fully_qualified_name() + std::string("/rgb/image_rect_color")).c_str());
+    // If rgb is reliable, camera_info is likely reliable too
+    sub_info_.subscribe(this, "rgb/camera_info", rmw_qos_profile_default, sub_opts);
+    RCLCPP_INFO(get_logger(), "Subscribing camera_info: '%s' (Default QoS)",
+      (get_fully_qualified_name() + std::string("/rgb/camera_info")).c_str());
+      
   }
 }
 
@@ -278,6 +286,13 @@ void PointCloudXyzrgbNode::imageCb(
       get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
     return;
   }
+
+    RCLCPP_INFO(
+      get_logger(), "publishing point cloud with label channel, width: %d, height: %d",
+      cloud_msg->width, cloud_msg->height);
+  RCLCPP_INFO(
+      get_logger(), "cloud msg size: %d", static_cast<int>(cloud_msg->data.size()));
+  pub_point_cloud_->publish(*cloud_msg);
 
   pub_point_cloud_->publish(*cloud_msg);
 }

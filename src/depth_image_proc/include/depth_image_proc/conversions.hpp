@@ -150,6 +150,17 @@ void convertRgb(
 
 cv::Mat initMatrix(cv::Mat cameraMatrix, cv::Mat distCoeffs, int width, int height, bool radial);
 
+void convertRgbLabel(
+  const sensor_msgs::msg::Image::ConstSharedPtr & rgb_msg,
+  const sensor_msgs::msg::Image::ConstSharedPtr & id_msg,
+  sensor_msgs::msg::PointCloud2::SharedPtr & cloud_msg,
+  int red_offset, int green_offset, int blue_offset, int color_step);
+
+
+void convertLabel(
+  const sensor_msgs::msg::Image::ConstSharedPtr & id_msg,
+  sensor_msgs::msg::PointCloud2::SharedPtr & cloud_msg);
+
 }  // namespace depth_image_proc
 
 #endif  // DEPTH_IMAGE_PROC__CONVERSIONS_HPP_

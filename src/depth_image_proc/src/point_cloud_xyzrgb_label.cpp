@@ -52,8 +52,11 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
 : rclcpp::Node("PointCloudXyzrgbLabelNode", options)
 {
   // Read parameters
-  int queue_size = this->declare_parameter<int>("queue_size", 5);
+  int queue_size = this->declare_parameter<int>("queue_size", 10);
   bool use_exact_sync = this->declare_parameter<bool>("exact_sync", false);
+
+  RCLCPP_INFO(
+    get_logger(), "PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode called");
 
   // Synchronize inputs. Topic subscriptions happen on demand in the connection callback.
   if (use_exact_sync) {
@@ -99,6 +102,8 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
 // Handles (un)subscribing when clients (un)subscribe
 void PointCloudXyzrgbLabelNode::connectCb()
 {
+  // RCLCPP_INFO(
+  //   get_logger(), "PointCloudXyzrgbLabelNode::connectCb called");
   std::lock_guard<std::mutex> lock(connect_mutex_);
   // TODO(ros2) Implement getNumSubscribers when rcl/rmw support it
   // if (pub_point_cloud_->getNumSubscribers() == 0)
@@ -151,6 +156,8 @@ void PointCloudXyzrgbLabelNode::imageCb(
   const Image::ConstSharedPtr & id_msg_in,
   const CameraInfo::ConstSharedPtr & info_msg)
 {
+    // RCLCPP_INFO(
+    //   get_logger(), "PointCloudXyzrgbLabelNode::imageCb called");
   // Check for bad inputs of color image
   if (depth_msg->header.frame_id != rgb_msg_in->header.frame_id) {
     RCLCPP_WARN_THROTTLE(
@@ -260,8 +267,7 @@ void PointCloudXyzrgbLabelNode::imageCb(
 
   // Supported color encodings: RGB8, BGR8, MONO8
   int red_offset, green_offset, blue_offset, color_step;
-  //TODO: support encodings is RGB8
-  std::cout<<"rgb_msg encoding: "<<rgb_msg->encoding<<std::endl;
+  // std::cout<<"rgb_msg encoding: "<<rgb_msg->encoding<<std::endl;
   if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
     red_offset = 0;
     green_offset = 1;
@@ -309,7 +315,18 @@ void PointCloudXyzrgbLabelNode::imageCb(
   cloud_msg->is_bigendian = false;
 
   sensor_msgs::PointCloud2Modifier pcd_modifier(*cloud_msg);
-  pcd_modifier.setPointCloud2FieldsByString(2, "xyz", "rgb");
+  // pcd_modifier.setPointCloud2FieldsByString(3, "xyz", "rgb", "label"); 
+  // pcd_modifier.setPointCloud2FieldsByString(2, "xyz", "rgb" ); 
+
+  pcd_modifier.setPointCloud2Fields(
+  7,
+  "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+  "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+  "z", 1, sensor_msgs::msg::PointField::FLOAT32,
+  "r", 1, sensor_msgs::msg::PointField::UINT8,
+  "g", 1, sensor_msgs::msg::PointField::UINT8,
+  "b", 1, sensor_msgs::msg::PointField::UINT8,
+  "label", 1, sensor_msgs::msg::PointField::UINT8);
 
   // Convert Depth Image to Pointcloud
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
@@ -322,23 +339,62 @@ void PointCloudXyzrgbLabelNode::imageCb(
     return;
   }
 
-  // Convert RGB
+  // Convert RGB + label
   if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
-    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGR8) {
-    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGRA8) {
-    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   } else if (rgb_msg->encoding == sensor_msgs::image_encodings::RGBA8) {
-    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   } else if (rgb_msg->encoding == sensor_msgs::image_encodings::MONO8) {
-    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   } else {
     RCLCPP_ERROR(
       get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
     return;
   }
 
+
+  // //only convert rgb
+  //   if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
+  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  // } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGR8) {
+  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  // } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGRA8) {
+  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  // } else if (rgb_msg->encoding == sensor_msgs::image_encodings::RGBA8) {
+  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  // } else if (rgb_msg->encoding == sensor_msgs::image_encodings::MONO8) {
+  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  // } else {
+  //   RCLCPP_ERROR(
+  //     get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
+  //   return;
+  // }
+
+  // // Convert label
+  // if (id_msg->encoding == sensor_msgs::image_encodings::MONO8) {
+  //   convertLabel(id_msg, cloud_msg);
+  // } else if (id_msg->encoding == sensor_msgs::image_encodings::MONO16) {
+  //   convertLabel(id_msg, cloud_msg);
+  // } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
+  //   convertLabel(id_msg, cloud_msg);
+  // } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+  //   convertLabel(id_msg, cloud_msg);
+  // } else {
+  //   RCLCPP_ERROR(
+  //     get_logger(), "Intensity image has unsupported encoding [%s]",
+  //     id_msg->encoding.c_str());
+  //   return;
+  // }
+
+  // RCLCPP_INFO(
+  //     get_logger(), "publishing point cloud with label channel, width: %d, height: %d",
+  //     cloud_msg->width, cloud_msg->height);
+  // RCLCPP_INFO(
+  //     get_logger(), "cloud msg size: %d", static_cast<int>(cloud_msg->data.size()));
   pub_point_cloud_->publish(*cloud_msg);
 }
 
