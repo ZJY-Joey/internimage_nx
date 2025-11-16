@@ -33,6 +33,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/point_cloud_xyz_radial.cpp
   src/point_cloud_xyzi_radial.cpp
   src/point_cloud_xyzrgb_radial.cpp
+  src/point_cloud_xyzrgb_label.cpp
   src/register.cpp
 )
 
@@ -56,6 +57,10 @@ rclcpp_components_register_node(${PROJECT_NAME}
 rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN "depth_image_proc::PointCloudXyzrgbNode"
   EXECUTABLE point_cloud_xyzrgb_node
+)
+rclcpp_components_register_node(${PROJECT_NAME}
+  PLUGIN "depth_image_proc::PointCloudXyzrgbLabelNode"
+  EXECUTABLE point_cloud_xyzrgb_label_node
 )
 rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN "depth_image_proc::PointCloudXyziNode"
