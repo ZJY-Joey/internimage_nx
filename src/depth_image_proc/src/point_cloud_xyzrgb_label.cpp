@@ -61,7 +61,7 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
   // Label filtering parameters
   // filter_labels: list of integer labels. By default, points with these labels will be dropped (masked as NaN).
   // Set filter_keep=true to invert behavior and keep only points with these labels.
-  auto filter_labels_param = this->declare_parameter<std::vector<int64_t>>("filter_labels", std::vector<int64_t>{15});
+  auto filter_labels_param = this->declare_parameter<std::vector<int64_t>>("filter_labels", std::vector<int64_t>{});
   filter_labels_param = this->get_parameter("filter_labels").as_integer_array();
   filter_keep_ = this->declare_parameter<bool>("filter_keep", false);
   filter_keep_ = this->get_parameter("filter_keep").as_bool();
@@ -345,16 +345,68 @@ void PointCloudXyzrgbLabelNode::imageCb(
   "b", 1, sensor_msgs::msg::PointField::UINT8,
   "label", 1, sensor_msgs::msg::PointField::UINT8);
 
-  // Convert Depth Image to Pointcloud
-  if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
-    convertDepth<uint16_t>(depth_msg, cloud_msg, model_);
-  } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-    convertDepth<float>(depth_msg, cloud_msg, model_);
-  } else {
-    RCLCPP_ERROR(
-      get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
-    return;
+
+
+  if (!filter_labels_.empty()) {
+    // convert depth image to pointcloud with condition filter of label
+    if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
+      convertDepthwithLabel<uint16_t>(depth_msg, cloud_msg, id_msg, filter_labels_, filter_keep_,model_);
+    } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+      convertDepthwithLabel<float>(depth_msg, cloud_msg, id_msg, filter_labels_, filter_keep_,model_);
+    } else {
+      RCLCPP_ERROR(
+        get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
+      return;
+    }
+  }else{
+      // Convert Depth Image to Pointcloud
+    if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
+      convertDepth<uint16_t>(depth_msg, cloud_msg, model_);
+    } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+      convertDepth<float>(depth_msg, cloud_msg, model_);
+    } else {
+      RCLCPP_ERROR(
+        get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
+      return;
+    }
+    //conver label
+    if (id_msg->encoding == sensor_msgs::image_encodings::MONO8) {
+      convertLabel(id_msg, cloud_msg);
+    } else if (id_msg->encoding == sensor_msgs::image_encodings::MONO16) {
+      convertLabel(id_msg, cloud_msg);
+    } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
+      convertLabel(id_msg, cloud_msg);
+    } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+      convertLabel(id_msg, cloud_msg);
+    } else {
+      RCLCPP_ERROR(
+        get_logger(), "Intensity image has unsupported encoding [%s]",
+        id_msg->encoding.c_str());
+      return;
+    }
   }
+
+  // If configured, mask points based on label (set XYZ to NaN)
+  // if (!filter_labels_.empty()) {
+  //   const float bad_point = std::numeric_limits<float>::quiet_NaN();
+  //   sensor_msgs::PointCloud2Iterator<uint8_t> iter_label(*cloud_msg, "label");
+  //   sensor_msgs::PointCloud2Iterator<float> iter_x(*cloud_msg, "x");
+  //   sensor_msgs::PointCloud2Iterator<float> iter_y(*cloud_msg, "y");
+  //   sensor_msgs::PointCloud2Iterator<float> iter_z(*cloud_msg, "z");
+  //   for (size_t v = 0; v < cloud_msg->height; ++v) {
+  //     for (size_t u = 0; u < cloud_msg->width; ++u, ++iter_label, ++iter_x, ++iter_y, ++iter_z) {
+  //       const uint8_t lbl = *iter_label;
+  //       const bool in_set = (filter_labels_.find(lbl) != filter_labels_.end());
+  //       const bool should_mask = filter_keep_ ? !in_set : in_set;
+  //       if (should_mask) {
+  //         *iter_x = bad_point;
+  //         *iter_y = bad_point;
+  //         *iter_z = bad_point;
+  //       }
+  //     }
+  //   }
+  // }
+  
 
   // Convert RGB + label
   // if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
@@ -389,43 +441,6 @@ void PointCloudXyzrgbLabelNode::imageCb(
     RCLCPP_ERROR(
       get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
     return;
-  }
-
-  // Convert label
-  if (id_msg->encoding == sensor_msgs::image_encodings::MONO8) {
-    convertLabel(id_msg, cloud_msg);
-  } else if (id_msg->encoding == sensor_msgs::image_encodings::MONO16) {
-    convertLabel(id_msg, cloud_msg);
-  } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
-    convertLabel(id_msg, cloud_msg);
-  } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-    convertLabel(id_msg, cloud_msg);
-  } else {
-    RCLCPP_ERROR(
-      get_logger(), "Intensity image has unsupported encoding [%s]",
-      id_msg->encoding.c_str());
-    return;
-  }
-
-  // If configured, mask points based on label (set XYZ to NaN)
-  if (!filter_labels_.empty()) {
-    const float bad_point = std::numeric_limits<float>::quiet_NaN();
-    sensor_msgs::PointCloud2Iterator<uint8_t> iter_label(*cloud_msg, "label");
-    sensor_msgs::PointCloud2Iterator<float> iter_x(*cloud_msg, "x");
-    sensor_msgs::PointCloud2Iterator<float> iter_y(*cloud_msg, "y");
-    sensor_msgs::PointCloud2Iterator<float> iter_z(*cloud_msg, "z");
-    for (size_t v = 0; v < cloud_msg->height; ++v) {
-      for (size_t u = 0; u < cloud_msg->width; ++u, ++iter_label, ++iter_x, ++iter_y, ++iter_z) {
-        const uint8_t lbl = *iter_label;
-        const bool in_set = (filter_labels_.find(lbl) != filter_labels_.end());
-        const bool should_mask = filter_keep_ ? !in_set : in_set;
-        if (should_mask) {
-          *iter_x = bad_point;
-          *iter_y = bad_point;
-          *iter_z = bad_point;
-        }
-      }
-    }
   }
 
   // RCLCPP_INFO(
