@@ -60,6 +60,10 @@ def generate_launch_description():
                     package='depth_image_proc',
                     plugin='depth_image_proc::PointCloudXyzrgbLabelNode',
                     name='point_cloud_xyzrgb_label_node',
+                    parameters=[{
+                        'filter_labels': [3, 6, 9, 11, 30, 53, 54, 58, 95, 120],
+                        'filter_keep': False,   # drop specified labels
+                    }],
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
                                 ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
                                 ('id/image_rect_id', '/internimage/id_segmentation_mask'),

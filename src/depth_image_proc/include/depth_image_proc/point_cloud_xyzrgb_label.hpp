@@ -35,6 +35,7 @@
 
 #include <memory>
 #include <mutex>
+#include <unordered_set>
 
 #include "depth_image_proc/visibility.h"
 #include "image_geometry/pinhole_camera_model.h"
@@ -88,6 +89,10 @@ private:
     const Image::ConstSharedPtr & rgb_msg,
     const Image::ConstSharedPtr & id_msg,
     const CameraInfo::ConstSharedPtr & info_msg);
+
+  // Filtering configuration
+  std::unordered_set<uint8_t> filter_labels_{15};   // Labels to drop (default) or keep (if filter_keep_ = true)
+  bool filter_keep_{false};                       // false: drop labels in set; true: keep only labels in set
 };
 
 }  // namespace depth_image_proc

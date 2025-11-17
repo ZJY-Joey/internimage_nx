@@ -4,3 +4,5 @@ install/
 models/
 *.png
 *.pyc
+scripts/__pycache__/
+scripts/*.py

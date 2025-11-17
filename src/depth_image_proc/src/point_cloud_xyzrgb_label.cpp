@@ -34,6 +34,9 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_set>
+#include <vector>
+#include <limits>
 
 #include "cv_bridge/cv_bridge.h"
 
@@ -54,6 +57,20 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
   // Read parameters
   int queue_size = this->declare_parameter<int>("queue_size", 10);
   bool use_exact_sync = this->declare_parameter<bool>("exact_sync", false);
+
+  // Label filtering parameters
+  // filter_labels: list of integer labels. By default, points with these labels will be dropped (masked as NaN).
+  // Set filter_keep=true to invert behavior and keep only points with these labels.
+  auto filter_labels_param = this->declare_parameter<std::vector<int64_t>>("filter_labels", std::vector<int64_t>{15});
+  filter_labels_param = this->get_parameter("filter_labels").as_integer_array();
+  filter_keep_ = this->declare_parameter<bool>("filter_keep", false);
+  filter_keep_ = this->get_parameter("filter_keep").as_bool();
+  filter_labels_.clear();
+  for (const auto & v : filter_labels_param) {
+    if (v >= 0 && v <= 255) {
+      filter_labels_.insert(static_cast<uint8_t>(v));
+    }
+  }
 
   RCLCPP_INFO(
     get_logger(), "PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode called");
@@ -388,6 +405,27 @@ void PointCloudXyzrgbLabelNode::imageCb(
       get_logger(), "Intensity image has unsupported encoding [%s]",
       id_msg->encoding.c_str());
     return;
+  }
+
+  // If configured, mask points based on label (set XYZ to NaN)
+  if (!filter_labels_.empty()) {
+    const float bad_point = std::numeric_limits<float>::quiet_NaN();
+    sensor_msgs::PointCloud2Iterator<uint8_t> iter_label(*cloud_msg, "label");
+    sensor_msgs::PointCloud2Iterator<float> iter_x(*cloud_msg, "x");
+    sensor_msgs::PointCloud2Iterator<float> iter_y(*cloud_msg, "y");
+    sensor_msgs::PointCloud2Iterator<float> iter_z(*cloud_msg, "z");
+    for (size_t v = 0; v < cloud_msg->height; ++v) {
+      for (size_t u = 0; u < cloud_msg->width; ++u, ++iter_label, ++iter_x, ++iter_y, ++iter_z) {
+        const uint8_t lbl = *iter_label;
+        const bool in_set = (filter_labels_.find(lbl) != filter_labels_.end());
+        const bool should_mask = filter_keep_ ? !in_set : in_set;
+        if (should_mask) {
+          *iter_x = bad_point;
+          *iter_y = bad_point;
+          *iter_z = bad_point;
+        }
+      }
+    }
   }
 
   // RCLCPP_INFO(
