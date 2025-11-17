@@ -340,55 +340,55 @@ void PointCloudXyzrgbLabelNode::imageCb(
   }
 
   // Convert RGB + label
-  if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
-    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
-  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGR8) {
-    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
-  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGRA8) {
-    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
-  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::RGBA8) {
-    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
-  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::MONO8) {
-    convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
-  } else {
-    RCLCPP_ERROR(
-      get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
-    return;
-  }
-
-
-  // //only convert rgb
-  //   if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
-  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  // if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
+  //   convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   // } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGR8) {
-  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  //   convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   // } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGRA8) {
-  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  //   convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   // } else if (rgb_msg->encoding == sensor_msgs::image_encodings::RGBA8) {
-  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  //   convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   // } else if (rgb_msg->encoding == sensor_msgs::image_encodings::MONO8) {
-  //   convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  //   convertRgbLabel(rgb_msg, id_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   // } else {
   //   RCLCPP_ERROR(
   //     get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
   //   return;
   // }
 
-  // // Convert label
-  // if (id_msg->encoding == sensor_msgs::image_encodings::MONO8) {
-  //   convertLabel(id_msg, cloud_msg);
-  // } else if (id_msg->encoding == sensor_msgs::image_encodings::MONO16) {
-  //   convertLabel(id_msg, cloud_msg);
-  // } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
-  //   convertLabel(id_msg, cloud_msg);
-  // } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-  //   convertLabel(id_msg, cloud_msg);
-  // } else {
-  //   RCLCPP_ERROR(
-  //     get_logger(), "Intensity image has unsupported encoding [%s]",
-  //     id_msg->encoding.c_str());
-  //   return;
-  // }
+
+  // //only convert rgb
+    if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGR8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGRA8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::RGBA8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::MONO8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  } else {
+    RCLCPP_ERROR(
+      get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
+    return;
+  }
+
+  // Convert label
+  if (id_msg->encoding == sensor_msgs::image_encodings::MONO8) {
+    convertLabel(id_msg, cloud_msg);
+  } else if (id_msg->encoding == sensor_msgs::image_encodings::MONO16) {
+    convertLabel(id_msg, cloud_msg);
+  } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
+    convertLabel(id_msg, cloud_msg);
+  } else if (id_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+    convertLabel(id_msg, cloud_msg);
+  } else {
+    RCLCPP_ERROR(
+      get_logger(), "Intensity image has unsupported encoding [%s]",
+      id_msg->encoding.c_str());
+    return;
+  }
 
   // RCLCPP_INFO(
   //     get_logger(), "publishing point cloud with label channel, width: %d, height: %d",

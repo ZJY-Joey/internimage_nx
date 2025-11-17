@@ -156,17 +156,20 @@ void convertLabel(
   const sensor_msgs::msg::Image::ConstSharedPtr & id_msg,
   sensor_msgs::msg::PointCloud2::SharedPtr & cloud_msg)
 {
-  sensor_msgs::PointCloud2Iterator<float> iter_label(*cloud_msg, "label");
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_label(*cloud_msg, "label");
   const uint8_t * id_ptr = &id_msg->data[0];
 
+  // Best-effort bytes-per-pixel for id image (supports 8U/16U/32S typical encodings)
   int id_pixel_step = static_cast<int>(id_msg->step / id_msg->width);
   if (id_pixel_step <= 0) {
     id_pixel_step = 1;  // fallback for safety
   }
   int id_skip = static_cast<int>(id_msg->step - id_msg->width * id_pixel_step);
 
-  for (int v = 0; v < static_cast<int>(cloud_msg->height); ++v, id_ptr += id_skip ) {
-    for (int u = 0; u < static_cast<int>(cloud_msg->width); ++u, id_ptr += id_pixel_step, ++iter_label) {
+  // Iterate pixels and fill rgb + label
+  for (int v = 0; v < static_cast<int>(cloud_msg->height); ++v, id_ptr += id_skip) {
+    for (int u = 0; u < static_cast<int>(cloud_msg->width); ++u, id_ptr += id_pixel_step, ++iter_label)
+    {
       // Semantic label
       uint8_t label_value = 0;
       if (id_pixel_step == 1) {
@@ -185,7 +188,6 @@ void convertLabel(
     }
   }
 }
-
 
 
 
