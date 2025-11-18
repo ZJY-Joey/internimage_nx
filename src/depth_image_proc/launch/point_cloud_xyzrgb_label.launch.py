@@ -61,18 +61,37 @@ def generate_launch_description():
                     plugin='depth_image_proc::PointCloudXyzrgbLabelNode',
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
-                        'filter_labels': [3, 6, 9, 11, 30, 53, 54, 58, 95, 120],  # 
+                        'filter_labels': [3, 6, 9, 11, 30, 52, 53, 54, 58, 59, 95, 120],  
                         'filter_keep': False,   # drop specified labels
                     }],
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
                                 ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
                                 ('id/image_rect_id', '/internimage/id_segmentation_mask'),
-                                ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered'),
+                                ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered'), #   /zed/zed_node/depth/depth_registered
                                 ('points', '/internimage/segmentation/projected/points')]
                 ),
             ],
             output='screen',
         ),
+
+        # launch_ros.actions.Node(
+        #     package='image_transport',        # 包名是 'image_transport'
+        #     executable='republish',           # 可执行文件是 'republish'
+        #     name='depth_decompress_node',
+        #     output='screen',
+        #     parameters=[{
+        #         'use_sim_time': False,
+        #     }],
+        #     arguments=[
+        #         'compressedDepth',                                  # in_transport
+        #         'in:=/zed/zed_node/depth/depth_registered',          # in_topic
+        #         'raw',                                         # out_transport
+        #         'out:=/zed/zed_node/depth/depth_registered/raw'       # out_topic
+        #     ],
+        #     remappings=[
+        #         ('in/compressedDepth', '/zed/zed_node/depth/depth_registered/compressedDepth'),
+        #     ],
+        # )
 
         # rviz
         # launch_ros.actions.Node(

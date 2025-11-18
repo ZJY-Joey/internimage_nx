@@ -75,6 +75,25 @@ def generate_launch_description():
             output='screen',
         ),
 
+        launch_ros.actions.Node(
+            package='image_transport',        # 包名是 'image_transport'
+            executable='republish',           # 可执行文件是 'republish'
+            name='depth_decompress_node',
+            output='screen',
+            parameters=[{
+                'use_sim_time': False,
+            }],
+            arguments=[
+                'compressedDepth',                                  # in_transport
+                'in:=/zed/zed_node/depth/depth_registered',          # in_topic
+                'raw',                                         # out_transport
+                'out:=/zed/zed_node/depth/depth_registered/raw'       # out_topic
+            ],
+            remappings=[
+                ('in/compressedDepth', '/zed/zed_node/depth/depth_registered/compressedDepth'),
+            ],
+        )
+
         # rviz
         # launch_ros.actions.Node(
         #     package='rviz2', executable='rviz2', output='screen',

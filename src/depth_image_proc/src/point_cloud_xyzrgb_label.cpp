@@ -55,8 +55,8 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
 : rclcpp::Node("PointCloudXyzrgbLabelNode", options)
 {
   // Read parameters
-  int queue_size = this->declare_parameter<int>("queue_size", 10);
-  bool use_exact_sync = this->declare_parameter<bool>("exact_sync", false);
+  int queue_size = this->declare_parameter<int>("queue_size", 20);
+  bool use_exact_sync = this->declare_parameter<bool>("exact_sync", true);
 
   // Label filtering parameters
   // filter_labels: list of integer labels. By default, points with these labels will be dropped (masked as NaN).
