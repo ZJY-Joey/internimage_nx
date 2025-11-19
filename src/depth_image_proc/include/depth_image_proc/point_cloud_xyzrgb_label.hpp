@@ -37,12 +37,12 @@
 #include <mutex>
 #include <unordered_set>
 
-#include "depth_image_proc/visibility.h"
-#include "image_geometry/pinhole_camera_model.h"
-#include "message_filters/subscriber.h"
-#include "message_filters/synchronizer.h"
-#include "message_filters/sync_policies/exact_time.h"
-#include "message_filters/sync_policies/approximate_time.h"
+#include <depth_image_proc/visibility.h>
+#include <image_geometry/pinhole_camera_model.hpp>
+#include <message_filters/subscriber.hpp>
+#include <message_filters/synchronizer.hpp>
+#include <message_filters/sync_policies/exact_time.hpp>
+#include <message_filters/sync_policies/approximate_time.hpp>
 
 #include <image_transport/image_transport.hpp>
 #include <image_transport/subscriber_filter.hpp>

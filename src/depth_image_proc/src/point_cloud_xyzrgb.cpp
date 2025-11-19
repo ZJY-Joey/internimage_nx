@@ -35,10 +35,11 @@
 #include <mutex>
 #include <string>
 
-#include "cv_bridge/cv_bridge.h"
+#include "cv_bridge/cv_bridge.hpp"
 
 #include <depth_image_proc/conversions.hpp>
 #include <depth_image_proc/point_cloud_xyzrgb.hpp>
+#include <image_transport/camera_common.hpp>
 #include <image_transport/image_transport.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -47,15 +48,19 @@
 namespace depth_image_proc
 {
 
-
 PointCloudXyzrgbNode::PointCloudXyzrgbNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("PointCloudXyzrgbNode", options)
 {
+  // TransportHints does not actually declare the parameter
+  this->declare_parameter<std::string>("image_transport", "raw");
+  this->declare_parameter<std::string>("depth_image_transport", "raw");
+
+  // value used for invalid points for pcd conversion
+  invalid_depth_ = this->declare_parameter<double>("invalid_depth", 0.0);
+
   // Read parameters
-  int queue_size = this->declare_parameter<int>("queue_size", 10);
+  int queue_size = this->declare_parameter<int>("queue_size", 5);
   bool use_exact_sync = this->declare_parameter<bool>("exact_sync", false);
-    // If true, subscribe to rgb topic with RELIABLE QoS (useful when remapped to segmentation publisher)
-  // bool rgb_reliable_ = this->declare_parameter<bool>("rgb_reliable", false);
 
   // Synchronize inputs. Topic subscriptions happen on demand in the connection callback.
   if (use_exact_sync) {
@@ -82,64 +87,60 @@ PointCloudXyzrgbNode::PointCloudXyzrgbNode(const rclcpp::NodeOptions & options)
         std::placeholders::_3));
   }
 
-  // Monitor whether anyone is subscribed to the output
-  // TODO(ros2) Implement when SubscriberStatusCallback is available
-  // ros::SubscriberStatusCallback connect_cb = boost::bind(&PointCloudXyzrgbNode::connectCb, this);
-  connectCb();
-  // TODO(ros2) Implement when SubscriberStatusCallback is available
-  // Make sure we don't enter connectCb() between advertising and assigning to pub_point_cloud_
-  std::lock_guard<std::mutex> lock(connect_mutex_);
-  // TODO(ros2) Implement connect_cb when SubscriberStatusCallback is available
-  // pub_point_cloud_ = depth_nh.advertise<PointCloud>("points", 1, connect_cb, connect_cb);
-  pub_point_cloud_ = create_publisher<PointCloud2>("points", rclcpp::SensorDataQoS());
-  // TODO(ros2) Implement connect_cb when SubscriberStatusCallback is available
-}
+  // Create publisher with connect callback
+  rclcpp::PublisherOptions pub_options;
+  pub_options.event_callbacks.matched_callback =
+    [this](rclcpp::MatchedInfo & s)
+    {
+      std::lock_guard<std::mutex> lock(connect_mutex_);
+      if (s.current_count == 0) {
+        sub_depth_.unsubscribe();
+        sub_rgb_.unsubscribe();
+        sub_info_.unsubscribe();
+      } else if (!sub_depth_.getSubscriber()) {
+        // For compressed topics to remap appropriately, we need to pass a
+        // fully expanded and remapped topic name to image_transport
+        auto node_base = this->get_node_base_interface();
+        std::string depth_topic =
+          node_base->resolve_topic_or_service_name("depth_registered/image_rect", false);
+        std::string rgb_topic =
+          node_base->resolve_topic_or_service_name("rgb/image_rect_color", false);
+        // Allow also remapping camera_info to something different than default
+        std::string rgb_info_topic =
+          node_base->resolve_topic_or_service_name(
+          image_transport::getCameraInfoTopic(rgb_topic), false);
 
-// Handles (un)subscribing when clients (un)subscribe
-void PointCloudXyzrgbNode::connectCb()
-{
-  std::lock_guard<std::mutex> lock(connect_mutex_);
-  // TODO(ros2) Implement getNumSubscribers when rcl/rmw support it
-  // if (pub_point_cloud_->getNumSubscribers() == 0)
-  if (0) {
-    // TODO(ros2) Implement getNumSubscribers when rcl/rmw support it
-    sub_depth_.unsubscribe();
-    sub_rgb_.unsubscribe();
-    sub_info_.unsubscribe();
-  } else if (!sub_depth_.getSubscriber()) {
-    // parameter for depth_image_transport hint
-    std::string depth_image_transport_param = "depth_image_transport";
-    image_transport::TransportHints depth_hints(this, "raw", depth_image_transport_param);
+        // parameter for depth_image_transport hint
+        image_transport::TransportHints depth_hints(this, "raw", "depth_image_transport");
 
-    rclcpp::SubscriptionOptions sub_opts;
-    // Update the subscription options to allow reconfigurable qos settings.
-    sub_opts.qos_overriding_options = rclcpp::QosOverridingOptions {
-      {
-        // Here all policies that are desired to be reconfigurable are listed.
-        rclcpp::QosPolicyKind::Depth,
-        rclcpp::QosPolicyKind::Durability,
-        rclcpp::QosPolicyKind::History,
-        rclcpp::QosPolicyKind::Reliability,
-      }};
+        rclcpp::SubscriptionOptions sub_opts;
+        // Update the subscription options to allow reconfigurable qos settings.
+        sub_opts.qos_overriding_options = rclcpp::QosOverridingOptions {
+          {
+            // Here all policies that are desired to be reconfigurable are listed.
+            rclcpp::QosPolicyKind::Depth,
+            rclcpp::QosPolicyKind::Durability,
+            rclcpp::QosPolicyKind::History,
+            rclcpp::QosPolicyKind::Reliability,
+          }};
 
-    // depth image can use different transport.(e.g. compressedDepth)
-    sub_depth_.subscribe(
-      this, "depth_registered/image_rect",
-      depth_hints.getTransport(), rmw_qos_profile_default, sub_opts);
+        // depth image can use different transport.(e.g. compressedDepth)
+        sub_depth_.subscribe(
+          this, depth_topic,
+          depth_hints.getTransport(), rmw_qos_profile_default, sub_opts);
 
-    // rgb uses normal ros transport hints.
-    image_transport::TransportHints hints(this, "raw");
-    sub_rgb_.subscribe(
-      this, "rgb/image_rect_color",
-      hints.getTransport(), rmw_qos_profile_default, sub_opts);
-    RCLCPP_INFO(get_logger(), "Subscribing rgb: '%s' (Reliable QoS - for segmentation publishers)",
-      (get_fully_qualified_name() + std::string("/rgb/image_rect_color")).c_str());
-    // If rgb is reliable, camera_info is likely reliable too
-    sub_info_.subscribe(this, "rgb/camera_info", rmw_qos_profile_default, sub_opts);
-    RCLCPP_INFO(get_logger(), "Subscribing camera_info: '%s' (Default QoS)",
-      (get_fully_qualified_name() + std::string("/rgb/camera_info")).c_str());
-      
-  }
+        // rgb uses normal ros transport hints.
+        image_transport::TransportHints hints(this);
+        sub_rgb_.subscribe(
+          this, rgb_topic,
+          hints.getTransport(), rmw_qos_profile_default, sub_opts);
+        sub_info_.subscribe(this, rgb_info_topic);
+      }
+    };
+  // Allow overriding QoS settings (history, depth, reliability)
+  pub_options.qos_overriding_options = rclcpp::QosOverridingOptions::with_default_policies();
+  pub_point_cloud_ = create_publisher<PointCloud2>("points", rclcpp::SystemDefaultsQoS(),
+      pub_options);
 }
 
 void PointCloudXyzrgbNode::imageCb(
@@ -261,9 +262,9 @@ void PointCloudXyzrgbNode::imageCb(
 
   // Convert Depth Image to Pointcloud
   if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
-    convertDepth<uint16_t>(depth_msg, cloud_msg, model_);
+    convertDepth<uint16_t>(depth_msg, cloud_msg, model_, invalid_depth_);
   } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-    convertDepth<float>(depth_msg, cloud_msg, model_);
+    convertDepth<float>(depth_msg, cloud_msg, model_, invalid_depth_);
   } else {
     RCLCPP_ERROR(
       get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
@@ -286,13 +287,6 @@ void PointCloudXyzrgbNode::imageCb(
       get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
     return;
   }
-
-    RCLCPP_INFO(
-      get_logger(), "publishing point cloud with label channel, width: %d, height: %d",
-      cloud_msg->width, cloud_msg->height);
-  RCLCPP_INFO(
-      get_logger(), "cloud msg size: %d", static_cast<int>(cloud_msg->data.size()));
-  pub_point_cloud_->publish(*cloud_msg);
 
   pub_point_cloud_->publish(*cloud_msg);
 }

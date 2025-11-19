@@ -75,7 +75,7 @@ def build_engine_onnx(model_file, save_path, logger):
     return runtime.deserialize_cuda_engine(serialized_engine)
 
 
-def _build_cv2_legend_panel(unique_ids, class_names, palette, font_scale=0.5, padding=8, swatch=16,
+def build_cv2_legend_panel(unique_ids, class_names, palette, font_scale=0.5, padding=8, swatch=16,
                             text_color=(0, 0, 0), bg_color=(255, 255, 255)):
     """Build a legend panel using OpenCV. Returns BGR image or None."""
     filtered = [i for i in unique_ids if 0 <= i < len(class_names)]
@@ -176,7 +176,7 @@ def overlay_segmentation_and_encode(segmentation, original_bgr, palette=None, cl
 
     out_img = overlay
     if merge_legend and (class_names is not None):
-        panel = _build_cv2_legend_panel(np.unique(seg_resized), class_names, palette)
+        panel = build_cv2_legend_panel(np.unique(seg_resized), class_names, palette)
         if panel is not None:
             ih, iw = out_img.shape[:2]
             ph, pw = panel.shape[:2]
@@ -213,13 +213,13 @@ class InternImageNode(Node):
         self.declare_parameter("default_data_dir","/home/jetson/workspaces/segmentation_ws/models/internimage_s/")
         default_data_dir = self.get_parameter('default_data_dir').get_parameter_value().string_value            
         # publish internimage result topic
-        self.internimage_pub = self.create_publisher(CompressedImage, self.result_topic, 10)
+        self.internimage_pub = self.create_publisher(CompressedImage, self.result_topic, 10)  
         sensor_qos = QoSPresetProfiles.SENSOR_DATA.value
         # Use RELIABLE QoS for segmentation image publishers to be compatible with subscribers
         reliable_qos = QoSProfile(depth=10)
         reliable_qos.reliability = QoSReliabilityPolicy.RELIABLE
         self.image_sub = self.create_subscription(
-            CompressedImage, self.image_topic, self.image_callback, sensor_qos
+            CompressedImage, self.image_topic, self._image_callback, sensor_qos
         )
         self.declare_parameter("color_segmentation_topic", "/internimage/color_segmentation_mask")
         self.declare_parameter("id_segmentation_topic", "/internimage/id_segmentation_mask")
@@ -341,6 +341,9 @@ class InternImageNode(Node):
         # Precompute normalization constants for fast per-frame preprocessing
         self._mean = np.array(self._mean, dtype=np.float32)  # RGB
         self._inv_std = np.array(self._inv_std, dtype=np.float32)  # RGB
+        self.segmentation_result = None
+        self.cv_image = None
+        self.image_msg = None
 
 
 
@@ -349,9 +352,6 @@ class InternImageNode(Node):
 
 
     def _combined_seg_color_msg(self, seg2d, color_rgb, header=None):
-        """构造 (H,W,4) 矩阵: [seg_id, R, G, B] 并发布为多通道图像。
-        注意：ROS 标准编码没有直接 "RGB(seg)+ID" 格式，采用通道重排确保兼容。
-        """
         seg = np.asarray(seg2d)
         if seg.ndim != 2:
             raise ValueError(f"segmentation must be 2D, got {seg.shape}")
@@ -366,6 +366,38 @@ class InternImageNode(Node):
         if header is not None:
             msg.header = header
         return msg
+    
+    def _image_callback(self, msg):
+        t0 = time.time_ns()
+        try:
+            # Decode incoming ROS image (CompressedImage or Image) into an OpenCV BGR ndarray
+            if isinstance(msg, CompressedImage):
+                np_arr = np.frombuffer(msg.data, dtype=np.uint8)
+                cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                if cv_image is None:
+                    raise RuntimeError("unable to decode compressed image (data may be corrupted or unsupported encoding)")
+            elif isinstance(msg, Image):
+                cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            else:
+                raise TypeError(f"Unsupported image message type: {type(msg)}, please publish Image or CompressedImage")
+            
+            t1 = time.time_ns()
+            self.get_logger().info(f'Image decoding time: {(t1 - t0) / 1e6:.3f} ms')
+            # print("cv_image received, shape:", cv_image.shape) #( h w c)
+            # Fast preprocess (BGR -> RGB, resize, normalize) directly into TensorRT host buffer
+            self._preprocess_to_trt_input(cv_image)
+            t2 = time.time_ns()
+            elapsed_ms = (t2 - t1) / 1e6
+            self.get_logger().info(f'Preprocessing time: {elapsed_ms:.3f} ms')
+
+        except Exception as e:
+            self.get_logger().error(f'Error during imagecallback: {e}')
+        self.cv_image = cv_image
+        self.image_msg = msg
+        t3 = time.time_ns()
+        # check inference total time
+        elapsed_ms = (t3 - t0) / 1e6
+        self.get_logger().info(f'toatal image callback time: {elapsed_ms:.3f} ms')
 
 
     def _preprocess_to_trt_input(self, bgr_image):
@@ -399,31 +431,14 @@ class InternImageNode(Node):
         host_view[0, :, :] = rgb[:, :, 0]
         host_view[1, :, :] = rgb[:, :, 1]
         host_view[2, :, :] = rgb[:, :, 2]
+        
         # print("================================ End Preprocessing ==================")
-
-    def image_callback(self, msg):
-        t0 = time.time_ns()
-        try:
-            # Decode incoming ROS image (CompressedImage or Image) into an OpenCV BGR ndarray
-            if isinstance(msg, CompressedImage):
-                np_arr = np.frombuffer(msg.data, dtype=np.uint8)
-                cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-                if cv_image is None:
-                    raise RuntimeError("无法解码压缩图像（可能数据损坏或编码不支持）")
-            elif isinstance(msg, Image):
-                cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-            else:
-                raise TypeError(f"不支持的图像消息类型: {type(msg)}，请发布 Image 或 CompressedImage")
-            
-            t1 = time.time_ns()
-            # print("cv_image received, shape:", cv_image.shape) #( h w c)
-            # Fast preprocess (BGR -> RGB, resize, normalize) directly into TensorRT host buffer
-            self._preprocess_to_trt_input(cv_image)
-            t2 = time.time_ns()
-            preprocess_ms = (t2 - t1) / 1e6
-            # self.get_logger().info(f'Preprocess time: {preprocess_ms:.3f} ms') 
-
-
+    
+    def _inference_publish(self, cv_image, msg):
+        if(cv_image is None and msg is None):
+            self.get_logger().info("waiting image available for inference……")
+            return
+        else:
             start_ns = time.time_ns()
             trt_outputs = common.do_inference(
                 self._context,
@@ -440,27 +455,26 @@ class InternImageNode(Node):
             # print("trt_shape:", trt_outputs[0].shape)
             # print("trt_outputs[0] dtype:", trt_outputs[0].dtype)
 
-            segmentation = trt_outputs[0].reshape((self.trt_h, self.trt_w))  # (H,W) 类别ID整型图 (模型输出分辨率)
-            # print("segmentation shape:", segmentation.shape)
-            # print("segmentation[0][0]:", segmentation[0][0])
+            self.segmentation_result = trt_outputs[0].reshape((self.trt_h, self.trt_w))  # (H,W) 类别ID整型图 (模型输出分辨率)
+            # print("segmentation shape:", self.segmentation_result.shape)
+            # print("segmentation[0][0]:", self.segmentation_result[0][0])
 
-            t3 = time.time_ns()
-
+            t4 = time.time_ns()
             # Publish segmentation outputs
             # 1) Native resolution (match incoming RGB for compatibility with depth_image_proc)
             in_h, in_w = cv_image.shape[:2]
-            if segmentation.shape != (in_h, in_w):
-                seg_native = cv2.resize(segmentation.astype(np.int32), (in_w, in_h), interpolation=cv2.INTER_NEAREST)
+            if self.segmentation_result.shape != (in_h, in_w):
+                seg_native = cv2.resize(self.segmentation_result.astype(np.int32), (in_w, in_h), interpolation=cv2.INTER_NEAREST)
             else:
-                seg_native = segmentation
+                seg_native = self.segmentation_result
 
             # 2) Combined resolution (for optional combined RGBA output)
             target_h = self.combined_h
             target_w = self.combined_w
             if (in_h, in_w) == (target_h, target_w):
                 seg_combined = seg_native
-            elif segmentation.shape == (target_h, target_w):
-                seg_combined = segmentation
+            elif self.segmentation_result.shape == (target_h, target_w):
+                seg_combined = self.segmentation_result
             else:
                 seg_combined = cv2.resize(seg_native.astype(np.int32), (target_w, target_h), interpolation=cv2.INTER_NEAREST)
 
@@ -507,10 +521,7 @@ class InternImageNode(Node):
                 except Exception as ex:
                     self.get_logger().error(f'publish color segmentation failed: {ex}')
 
-
-
-
-            
+            # 3) Visualization overlay (optional) in rgb image space if enabled
             if  self.visualize_image_en:
                 # Visualize segmentation projected onto original image and encode for publishing
                 try:
@@ -518,7 +529,7 @@ class InternImageNode(Node):
                     if (self._frame_idx % self.publish_stride) == 0:
                         print("Publishing overlay segmentation...")
                         img_bytes, composed = overlay_segmentation_and_encode(
-                            segmentation,
+                            self.segmentation_result,
                             original_bgr=cv_image,
                             palette=self._palette if self._palette else None,
                             class_names=self.class_names if self.show_legend else None,
@@ -529,9 +540,9 @@ class InternImageNode(Node):
                             jpeg_quality=self.jpeg_quality
                         )
                         # print("Composed image shape:", composed.shape)
-                        t4 = time.time_ns()
-                        visualize_ms = (t4 - t3) / 1e6
-                        self.get_logger().info(f'Visualization time: {visualize_ms:.3f} ms')
+                        # t4 = time.time_ns()
+                        # visualize_ms = (t4 - t3) / 1e6
+                        # self.get_logger().info(f'Visualization time: {visualize_ms:.3f} ms')
 
                         # Publish as CompressedImage with original header if available
                         out_msg = CompressedImage()
@@ -541,19 +552,16 @@ class InternImageNode(Node):
                         out_msg.data = img_bytes
                         self.internimage_pub.publish(out_msg)
 
-                        t5 = time.time_ns()
-                        publish_ms = (t5 - t4) / 1e6
-                        self.get_logger().info(f'Publish time: {publish_ms:.3f} ms')
+                        # t5 = time.time_ns()
+                        # publish_ms = (t5 - t4) / 1e6
+                        # self.get_logger().info(f'Publish time: {publish_ms:.3f} ms')
                 
                 except Exception as ex:
                     self.get_logger().error(f'Failed to visualize/publish overlay segmentation: {ex}')
-
-        except Exception as e:
-            self.get_logger().error(f'Error during inference/publish: {e}')
-        # check inference total time
-        t1 = time.time_ns()
-        elapsed_ms = (t1 - t0) / 1e6
-        self.get_logger().info(f'Total callback time: {elapsed_ms:.3f} ms')
+            t5 = time.time_ns()
+            total_ms = (t5 - t4) / 1e6    
+            self.get_logger().info(f'publish time: {total_ms:.3f} ms')
+    
 
 
     def destroy_node(self):
@@ -568,8 +576,12 @@ class InternImageNode(Node):
 def main():
     rclpy.init()
     node = InternImageNode()
+    
     try:
-        rclpy.spin(node)
+        while(rclpy.ok()):
+            # inference && publish  in:preprocessed image  out:segmentation
+            node._inference_publish(node.cv_image, node.image_msg)
+            rclpy.spin_once(node, timeout_sec=0.1)
     except KeyboardInterrupt:
         pass
     finally:

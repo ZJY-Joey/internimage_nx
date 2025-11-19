@@ -38,7 +38,7 @@
 #include <vector>
 #include <limits>
 
-#include "cv_bridge/cv_bridge.h"
+#include "cv_bridge/cv_bridge.hpp"
 
 #include <depth_image_proc/conversions.hpp>
 #include <depth_image_proc/point_cloud_xyzrgb_label.hpp>

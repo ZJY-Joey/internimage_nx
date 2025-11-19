@@ -6,3 +6,5 @@ models/
 *.pyc
 scripts/__pycache__/
 scripts/*.py
+.vscode/
+bags/

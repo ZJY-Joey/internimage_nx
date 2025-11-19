@@ -30,9 +30,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import os
-
-from ament_index_python.packages import get_package_share_directory
+# imports trimmed: get_package_share_directory and os were unused in this launch
 from launch import LaunchDescription
 
 import launch_ros.actions
@@ -67,7 +65,7 @@ def generate_launch_description():
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
                                 ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
                                 ('id/image_rect_id', '/internimage/id_segmentation_mask'),
-                                ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered'), #   /zed/zed_node/depth/depth_registered
+                                ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered/decompressed'), #   /zed/zed_node/depth/depth_registered
                                 ('points', '/internimage/segmentation/projected/points')]
                 ),
             ],
@@ -75,23 +73,43 @@ def generate_launch_description():
         ),
 
         # launch_ros.actions.Node(
-        #     package='image_transport',        # 包名是 'image_transport'
-        #     executable='republish',           # 可执行文件是 'republish'
-        #     name='depth_decompress_node',
-        #     output='screen',
+        #     package='nodelet', executable='nodelet', output='screen',
+        #     arguments=['load', 'pcl/PassThrough', 'pcl_manager'],
+        #     remappings=[('~input', '/internimage/segmentation/projected/points/filtered')],
         #     parameters=[{
-        #         'use_sim_time': False,
+        #         'filter_field_name': 'z',
+        #         'filter_limit_min': 0.01,
+        #         'filter_limit_max': 1.5,
+        #         'filter_limit_negative': False,
         #     }],
-        #     arguments=[
-        #         'compressedDepth',                                  # in_transport
-        #         'in:=/zed/zed_node/depth/depth_registered',          # in_topic
-        #         'raw',                                         # out_transport
-        #         'out:=/zed/zed_node/depth/depth_registered/raw'       # out_topic
-        #     ],
-        #     remappings=[
-        #         ('in/compressedDepth', '/zed/zed_node/depth/depth_registered/compressedDepth'),
-        #     ],
-        # )
+        # ), 
+
+        # depth image decompressor
+        launch_ros.actions.Node(
+            package='image_transport',
+            executable='republish',
+            name='depth_decompress_node',
+            output='screen',
+            # match the CLI: ros2 run image_transport republish --ros-args -p in_transport:=compressedDepth -p out_transport:=raw \
+            #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
+            #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
+            parameters=[{
+                'in_transport': 'compressedDepth',
+                'out_transport': 'raw',
+                # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
+                'ffmpeg_image_transport.decoders.hevc': 'hevc_cuvid,hevc',
+            }],
+            arguments=[
+                'compressedDepth',
+                'in:=/zed/zed_node/depth/depth_registered/compressedDepth',
+                'raw',
+                'out:=/zed/zed_node/depth/depth_registered/decompressed',
+            ],
+            remappings=[
+                ('in/compressedDepth', '/zed/zed_node/depth/depth_registered/compressedDepth'),
+                ('out/raw', '/zed/zed_node/depth/depth_registered/decompressed'),
+            ],
+        ),
 
         # rviz
         # launch_ros.actions.Node(
