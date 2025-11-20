@@ -59,6 +59,7 @@ def generate_launch_description():
                     plugin='depth_image_proc::PointCloudXyzrgbLabelNode',
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
+                        'use_sim_time': True,
                         'filter_labels': [3, 6, 9, 11, 30, 52, 53, 54, 58, 59, 95, 120],  
                         'filter_keep': False,   # drop specified labels
                     }],
@@ -68,21 +69,44 @@ def generate_launch_description():
                                 ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered/decompressed'), #   /zed/zed_node/depth/depth_registered
                                 ('points', '/internimage/segmentation/projected/points')]
                 ),
+                
+
+                launch_ros.descriptions.ComposableNode(
+                    package='pcl_ros',
+                    plugin='pcl_ros::VoxelGrid',
+                    name='voxel_grid_node',
+                    parameters=[{
+                        'use_sim_time': True,
+                        'input_frame': 'aliengo',
+                        'leaf_size': 0.05,
+                        'filter_field_name': 'z',
+                        'filter_limit_min': -1000.0,
+                        'filter_limit_max': 1000.0,
+                        # 'min_points_per_voxel': 100,
+                    }],
+                    remappings=[('input', '/internimage/segmentation/projected/points'),
+                                ('output', '/internimage/segmentation/voxel/points')]
+                ),
+
+                launch_ros.descriptions.ComposableNode(
+                    package='pcl_ros',
+                    plugin='pcl_ros::PassThrough',
+                    name='passthrough_filter_node',
+                    parameters=[{
+                        'user_sim_time': True,
+                        'input_frame': 'aliengo',
+                        'filter_field_name': 'z',
+                        'filter_limit_min': -1.0,
+                        'filter_limit_max': 0.5,
+                    }],
+                    remappings=[('input', '/internimage/segmentation/voxel/points'),
+                                ('output', '/internimage/segmentation/filtered/points')]
+                ),
             ],
             output='screen',
         ),
 
-        # launch_ros.actions.Node(
-        #     package='nodelet', executable='nodelet', output='screen',
-        #     arguments=['load', 'pcl/PassThrough', 'pcl_manager'],
-        #     remappings=[('~input', '/internimage/segmentation/projected/points/filtered')],
-        #     parameters=[{
-        #         'filter_field_name': 'z',
-        #         'filter_limit_min': 0.01,
-        #         'filter_limit_max': 1.5,
-        #         'filter_limit_negative': False,
-        #     }],
-        # ), 
+        
 
         # depth image decompressor
         launch_ros.actions.Node(
