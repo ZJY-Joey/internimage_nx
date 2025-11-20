@@ -60,8 +60,8 @@ def generate_launch_description():
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
                         'use_sim_time': True,
-                        'filter_labels': [3, 6, 9, 11, 30, 52, 53, 54, 58, 59, 95, 120],  
-                        'filter_keep': False,   # drop specified labels
+                        'filter_labels': [15,19,30,33,64,97,110,111, 138],   # 3, 6, 9, 11, 12, 30, 52, 53, 54, 58, 59, 95, 120 94土地 91土路
+                        'filter_keep': True,   # drop specified labels
                     }],
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
                                 ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
@@ -78,6 +78,7 @@ def generate_launch_description():
                     parameters=[{
                         'use_sim_time': True,
                         'input_frame': 'aliengo',
+                        'output_frame': 'aliengo',  
                         'leaf_size': 0.05,
                         'filter_field_name': 'z',
                         'filter_limit_min': -1000.0,
@@ -95,6 +96,7 @@ def generate_launch_description():
                     parameters=[{
                         'user_sim_time': True,
                         'input_frame': 'aliengo',
+                        'output_frame': 'world',  
                         'filter_field_name': 'z',
                         'filter_limit_min': -1.0,
                         'filter_limit_max': 0.5,
@@ -125,7 +127,7 @@ def generate_launch_description():
             }],
             arguments=[
                 'compressedDepth',
-                'in:=/zed/zed_node/depth/depth_registered/compressedDepth',
+                'in:=/zed/zed_node/depth/depth_registered/compressedDepth', # /zed/zed_node/depth/depth_registered/compressed  /zed/zed_node/depth/depth_registered/compressedDepth
                 'raw',
                 'out:=/zed/zed_node/depth/depth_registered/decompressed',
             ],

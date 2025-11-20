@@ -1,7 +1,7 @@
 internimage:
   ros__parameters:
     use_sim_time: false
-    #订阅话题
+    # subscribe topics
     image_topic: "/zed/zed_node/rgb/color/rect/image/compressed"
     depth_topic: "/zed/zed_node/depth/depth_registered"
     model_name: "upernet_internimage_xl_600x960_fp16"
