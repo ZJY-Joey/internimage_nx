@@ -1,11 +1,6 @@
 import os
 import sys
 import time
-import io
-import random
-from tokenize import String
-
-import PIL
 import numpy as np
 
 try:
@@ -24,12 +19,10 @@ from rclpy.qos import QoSPresetProfiles, QoSProfile, QoSReliabilityPolicy
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
-from matplotlib.colors import Normalize
 # import tensorrt sample common module
 sys.path.append('/usr/src/tensorrt/samples/python')
 import common
 import cv2
-from PIL import Image as PILImage
 
 
 
@@ -350,6 +343,17 @@ class InternImageNode(Node):
         # CvBridge for converting sensor_msgs/Image to OpenCV
         self.bridge = CvBridge()
 
+        # --- Inference gating state ---
+        # Sequence number incremented every time a new image arrives via _image_callback
+        self._last_image_seq = 0
+        # Sequence number of last image we actually ran inference on
+        self._last_inferred_seq = 0
+        # Flag set True when a new image has been received & preprocessed but not yet inferred
+        self._new_image_available = False
+        # Idle logging control to avoid spamming logs while waiting for images
+        self._last_wait_log_time = 0.0
+        self._idle_log_interval = 5.0  # seconds between idle debug logs
+
 
     def _combined_seg_color_msg(self, seg2d, color_rgb, header=None):
         seg = np.asarray(seg2d)
@@ -394,6 +398,9 @@ class InternImageNode(Node):
             self.get_logger().error(f'Error during imagecallback: {e}')
         self.cv_image = cv_image
         self.image_msg = msg
+        # Mark new image available for inference and bump sequence counter
+        self._last_image_seq += 1
+        self._new_image_available = True
         t3 = time.time_ns()
         # check inference total time
         elapsed_ms = (t3 - t0) / 1e6
@@ -435,8 +442,13 @@ class InternImageNode(Node):
         # print("================================ End Preprocessing ==================")
     
     def _inference_publish(self, cv_image, msg):
-        if(cv_image is None and msg is None):
-            self.get_logger().info("waiting image available for inference……")
+        # Guard: only run inference if a new image has arrived since last inference.
+        if cv_image is None or msg is None or (not self._new_image_available) or (self._last_image_seq == self._last_inferred_seq):
+            # Throttled idle logging
+            now = time.time()
+            if (now - self._last_wait_log_time) >= self._idle_log_interval:
+                self.get_logger().debug("Idle: no new image; inference paused.")
+                self._last_wait_log_time = now
             return
         else:
             start_ns = time.time_ns()
@@ -561,6 +573,9 @@ class InternImageNode(Node):
             t5 = time.time_ns()
             total_ms = (t5 - t4) / 1e6    
             self.get_logger().info(f'publish time: {total_ms:.3f} ms')
+            # Update gating state: mark this image as processed
+            self._last_inferred_seq = self._last_image_seq
+            self._new_image_available = False
     
 
 
@@ -579,9 +594,10 @@ def main():
     
     try:
         while(rclpy.ok()):
-            # inference && publish  in:preprocessed image  out:segmentation
-            node._inference_publish(node.cv_image, node.image_msg)
+            # Spin first to allow image callbacks to fill new data
             rclpy.spin_once(node, timeout_sec=0.1)
+            # Only perform inference if a new image has arrived
+            node._inference_publish(node.cv_image, node.image_msg)
     except KeyboardInterrupt:
         pass
     finally:

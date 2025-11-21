@@ -394,14 +394,13 @@ void PointCloudXyzrgbLabelNode::imageCb(
   // pcd_modifier.setPointCloud2FieldsByString(2, "xyz", "rgb" ); 
 
   pcd_modifier.setPointCloud2Fields(
-  7,
+  5,
   "x", 1, sensor_msgs::msg::PointField::FLOAT32,
   "y", 1, sensor_msgs::msg::PointField::FLOAT32,
   "z", 1, sensor_msgs::msg::PointField::FLOAT32,
-  "r", 1, sensor_msgs::msg::PointField::UINT8,
-  "g", 1, sensor_msgs::msg::PointField::UINT8,
-  "b", 1, sensor_msgs::msg::PointField::UINT8,
+  "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
   "label", 1, sensor_msgs::msg::PointField::UINT8);
+
 
 
 

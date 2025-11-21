@@ -296,7 +296,7 @@ void convertDepthwithLabelAndConfidence(
         throw std::runtime_error("Unsupported confidence image encoding");
       }
       // std::cout<<"conf value: "<<static_cast<int>(conf_value)<<std::endl;
-      if (conf_value > 50) {  // threshold can be parameterized
+      if (conf_value > 40) {  // threshold can be parameterized
         count++;
         *iter_x = bad_point;
         *iter_y = bad_point;
