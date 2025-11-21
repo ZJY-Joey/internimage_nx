@@ -82,6 +82,7 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
       sub_depth_,
       sub_rgb_,
       sub_id_,
+      sub_conf_,
       sub_info_);
     exact_sync_->registerCallback(
       std::bind(
@@ -90,9 +91,11 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
         std::placeholders::_1,
         std::placeholders::_2,
         std::placeholders::_3,
-        std::placeholders::_4));
+        std::placeholders::_4,
+        std::placeholders::_5
+      ));
   } else {
-    sync_ = std::make_shared<Synchronizer>(SyncPolicy(queue_size), sub_depth_, sub_rgb_, sub_id_, sub_info_);
+    sync_ = std::make_shared<Synchronizer>(SyncPolicy(queue_size), sub_depth_, sub_rgb_, sub_id_, sub_conf_, sub_info_);
     sync_->registerCallback(
       std::bind(
         &PointCloudXyzrgbLabelNode::imageCb,
@@ -100,7 +103,8 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
         std::placeholders::_1,
         std::placeholders::_2,
         std::placeholders::_3,
-        std::placeholders::_4));
+        std::placeholders::_4,
+        std::placeholders::_5));
   }
 
   // Monitor whether anyone is subscribed to the output
@@ -129,6 +133,7 @@ void PointCloudXyzrgbLabelNode::connectCb()
     sub_depth_.unsubscribe();
     sub_rgb_.unsubscribe();
     sub_id_.unsubscribe();
+    sub_conf_.unsubscribe();
     sub_info_.unsubscribe();
   } else if (!sub_depth_.getSubscriber()) {
     // parameter for depth_image_transport hint
@@ -164,6 +169,12 @@ void PointCloudXyzrgbLabelNode::connectCb()
         this, "id/image_rect_id",
         id_hints.getTransport(), rmw_qos_profile_default, sub_opts);
 
+    //confidence uses confidence ros transport hints.
+    image_transport::TransportHints conf_hints(this, "raw");
+    sub_conf_.subscribe(
+        this, "confidence/image_rect_confidence",
+        conf_hints.getTransport(), rmw_qos_profile_default, sub_opts);
+
   }
 }
 
@@ -171,6 +182,7 @@ void PointCloudXyzrgbLabelNode::imageCb(
   const Image::ConstSharedPtr & depth_msg,
   const Image::ConstSharedPtr & rgb_msg_in,
   const Image::ConstSharedPtr & id_msg_in,
+  const Image::ConstSharedPtr & conf_msg_in,
   const CameraInfo::ConstSharedPtr & info_msg)
 {
     // RCLCPP_INFO(
@@ -193,6 +205,16 @@ void PointCloudXyzrgbLabelNode::imageCb(
       10000,  // 10 seconds
       "Depth image frame id [%s] doesn't match ID image frame id [%s]",
       depth_msg->header.frame_id.c_str(), id_msg_in->header.frame_id.c_str());
+  }
+
+  //check for bad inputs of confidence image
+  if (depth_msg->header.frame_id != conf_msg_in->header.frame_id) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(),
+      *get_clock(),
+      10000,  // 10 seconds
+      "Depth image frame id [%s] doesn't match Confidence image frame id [%s]",
+      depth_msg->header.frame_id.c_str(), conf_msg_in->header.frame_id.c_str());
   }
 
   // Update camera model
@@ -246,8 +268,44 @@ void PointCloudXyzrgbLabelNode::imageCb(
     rgb_msg = rgb_msg_in;
   }
 
-  // check if the input id image has to be resized
-  Image::ConstSharedPtr id_msg = id_msg_in;
+  // check if the input color image has to be resized
+  Image::ConstSharedPtr conf_msg = conf_msg_in;
+  if(depth_msg->width != conf_msg->width || depth_msg->height != conf_msg->height) {
+
+    float ratio = static_cast<float>(depth_msg->width) / static_cast<float>(conf_msg->width);
+
+    cv_bridge::CvImageConstPtr cv_ptr;
+    try {
+      cv_ptr = cv_bridge::toCvShare(conf_msg, conf_msg->encoding);
+    } catch (cv_bridge::Exception & e) {
+      RCLCPP_ERROR(get_logger(), "cv_bridge exception: %s", e.what());
+      return;
+    }
+    cv_bridge::CvImage cv_rsz;
+    cv_rsz.header = cv_ptr->header;
+    cv_rsz.encoding = cv_ptr->encoding;
+    cv::resize(
+      cv_ptr->image.rowRange(0, depth_msg->height / ratio), cv_rsz.image,
+      cv::Size(depth_msg->width, depth_msg->height));
+    if ((conf_msg->encoding == sensor_msgs::image_encodings::RGB8) ||
+      (conf_msg->encoding == sensor_msgs::image_encodings::BGR8) ||
+      (conf_msg->encoding == sensor_msgs::image_encodings::MONO8)) {
+      conf_msg = cv_rsz.toImageMsg();
+    } else {
+      conf_msg =
+        cv_bridge::toCvCopy(cv_rsz.toImageMsg(), sensor_msgs::image_encodings::MONO8)->toImageMsg();
+    }
+
+    RCLCPP_ERROR(
+      get_logger(), "Depth resolution (%ux%u) does not match conf resolution (%ux%u)",
+      depth_msg->width, depth_msg->height, conf_msg->width, conf_msg->height);
+    return;
+  } else {
+    conf_msg = conf_msg_in;
+  }
+
+
+    Image::ConstSharedPtr id_msg = id_msg_in;
   if(depth_msg->width != id_msg->width || depth_msg->height != id_msg->height) {
 
     float ratio = static_cast<float>(depth_msg->width) / static_cast<float>(id_msg->width);
@@ -350,14 +408,23 @@ void PointCloudXyzrgbLabelNode::imageCb(
   if (!filter_labels_.empty()) {
     // convert depth image to pointcloud with condition filter of label
     if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
-      convertDepthwithLabel<uint16_t>(depth_msg, cloud_msg, id_msg, filter_labels_, filter_keep_,model_);
+      convertDepthwithLabelAndConfidence<uint16_t>(depth_msg, cloud_msg, id_msg, conf_msg, filter_labels_, filter_keep_, model_);
     } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-      convertDepthwithLabel<float>(depth_msg, cloud_msg, id_msg, filter_labels_, filter_keep_,model_);
+      convertDepthwithLabelAndConfidence<float>(depth_msg, cloud_msg, id_msg, conf_msg, filter_labels_, filter_keep_, model_);
     } else {
       RCLCPP_ERROR(
         get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
       return;
     }
+    // if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
+    //   convertDepthwithLabel<uint16_t>(depth_msg, cloud_msg, id_msg, filter_labels_, filter_keep_, model_);
+    // } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+    //   convertDepthwithLabel<float>(depth_msg, cloud_msg, id_msg, filter_labels_, filter_keep_, model_);
+    // } else {
+    //   RCLCPP_ERROR(
+    //     get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
+    //   return;
+    // }
   }else{
       // Convert Depth Image to Pointcloud
     if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {

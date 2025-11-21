@@ -19,7 +19,7 @@ def generate_launch_description():
         description='Publish period (seconds) for aggregated map.'
     )
     use_sim_time_arg = DeclareLaunchArgument(
-        'use_sim_time', default_value='false',
+        'use_sim_time', default_value='True',
         description='Use simulation time if available.'
     )
 

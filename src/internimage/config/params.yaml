@@ -1,6 +1,6 @@
 internimage:
   ros__parameters:
-    use_sim_time: false
+    use_sim_time: true
     # subscribe topics
     image_topic: "/zed/zed_node/rgb/color/rect/image/compressed"
     depth_topic: "/zed/zed_node/depth/depth_registered"

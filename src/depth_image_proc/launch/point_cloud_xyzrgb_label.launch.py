@@ -60,48 +60,49 @@ def generate_launch_description():
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
                         'use_sim_time': True,
-                        'filter_labels': [15,19,30,33,64,97,110,111, 138],   # 3, 6, 9, 11, 12, 30, 52, 53, 54, 58, 59, 95, 120 94土地 91土路
-                        'filter_keep': True,   # drop specified labels
+                        'filter_labels': [3, 6, 9, 11, 12, 30, 52, 53, 54, 58, 59, 95, 120],   # 3, 6, 9, 11, 12, 30, 52, 53, 54, 58, 59, 95, 120 94土地 91土路    # 15,19,30,33,64,97,110,111, 138
+                        'filter_keep': False,   # drop specified labels
                     }],
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
                                 ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
                                 ('id/image_rect_id', '/internimage/id_segmentation_mask'),
+                                ('confidence/image_rect_confidence', '/zed/zed_node/confidence/confidence_map'), # /zed/zed_node/depth/depth_registered/decompressed  /zed/zed_node/confidence/confidence_map/decompressedConfidence
                                 ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered/decompressed'), #   /zed/zed_node/depth/depth_registered
                                 ('points', '/internimage/segmentation/projected/points')]
                 ),
                 
 
-                launch_ros.descriptions.ComposableNode(
-                    package='pcl_ros',
-                    plugin='pcl_ros::VoxelGrid',
-                    name='voxel_grid_node',
-                    parameters=[{
-                        'use_sim_time': True,
-                        'input_frame': 'aliengo',
-                        'output_frame': 'aliengo',  
-                        'leaf_size': 0.05,
-                        'filter_field_name': 'z',
-                        'filter_limit_min': -1000.0,
-                        'filter_limit_max': 1000.0,
-                        # 'min_points_per_voxel': 100,
-                    }],
-                    remappings=[('input', '/internimage/segmentation/projected/points'),
-                                ('output', '/internimage/segmentation/voxel/points')]
-                ),
+                # launch_ros.descriptions.ComposableNode(
+                #     package='pcl_ros',
+                #     plugin='pcl_ros::VoxelGrid',
+                #     name='voxel_grid_node',
+                #     parameters=[{
+                #         'use_sim_time': True,
+                #         'input_frame': 'aliengo',
+                #         'output_frame': 'aliengo',  
+                #         'leaf_size': 0.05,
+                #         'filter_field_name': 'z',
+                #         'filter_limit_min': -1000.0,
+                #         'filter_limit_max': 1000.0,
+                #         # 'min_points_per_voxel': 100,
+                #     }],
+                #     remappings=[('input', '/internimage/segmentation/projected/points'),
+                #                 ('output', '/internimage/segmentation/voxel/points')]
+                # ),
 
                 launch_ros.descriptions.ComposableNode(
                     package='pcl_ros',
                     plugin='pcl_ros::PassThrough',
                     name='passthrough_filter_node',
                     parameters=[{
-                        'user_sim_time': True,
+                        'use_sim_time': True,
                         'input_frame': 'aliengo',
                         'output_frame': 'world',  
                         'filter_field_name': 'z',
                         'filter_limit_min': -1.0,
                         'filter_limit_max': 0.5,
                     }],
-                    remappings=[('input', '/internimage/segmentation/voxel/points'),
+                    remappings=[('input', '/internimage/segmentation/projected/points'),
                                 ('output', '/internimage/segmentation/filtered/points')]
                 ),
             ],
@@ -109,6 +110,34 @@ def generate_launch_description():
         ),
 
         
+
+        
+        launch_ros.actions.Node(
+            package='image_transport',
+            executable='republish',
+            name='confidence_decompress_node',
+            output='screen',
+            # match the CLI: ros2 run image_transport republish --ros-args -p in_transport:=compressedDepth -p out_transport:=raw \
+            #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
+            #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
+            parameters=[{
+                'use_sim_time': True,
+                'in_transport': 'compressedDepth',
+                'out_transport': 'raw',
+                # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
+                'ffmpeg_image_transport.decoders.hevc': 'hevc_cuvid,hevc',
+            }],
+            arguments=[
+                'compressedDepth',
+                'in:=/zed/zed_node/confidence/confidence_map/compressedDepth', # /zed/zed_node/depth/depth_registered/compressed  /zed/zed_node/depth/depth_registered/compressedDepth
+                'raw',
+                'out:=/zed/zed_node/confidence/confidence_map/decompressedConfidence',
+            ],
+            remappings=[
+                ('in/compressedDepth', '/zed/zed_node/confidence/confidence_map/compressedDepth'),
+                ('out/raw', '/zed/zed_node/confidence/confidence_map/decompressedConfidence'),
+            ],
+        ),
 
         # depth image decompressor
         launch_ros.actions.Node(
@@ -120,6 +149,7 @@ def generate_launch_description():
             #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
             #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
             parameters=[{
+                'use_sim_time': True,
                 'in_transport': 'compressedDepth',
                 'out_transport': 'raw',
                 # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)

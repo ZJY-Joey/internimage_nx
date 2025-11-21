@@ -11,4 +11,6 @@ depth_cloud_acc:
     enable_transform: true
     lookup_timeout: 0.5  # seconds
     log_every_n: 10
-    warn_points_threshold: 1000000
+    max_aggregated_points: 10000000
+    rebuild_keep_last_clouds: 50
+    aggregation_strategy: "rebuild"  # or 'truncate'
