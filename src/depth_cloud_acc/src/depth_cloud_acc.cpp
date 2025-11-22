@@ -79,19 +79,22 @@ private:
     RCLCPP_INFO(this->get_logger(), "Received point cloud with %u points", msg->width);
     sensor_msgs::msg::PointCloud2::SharedPtr cloud = msg;
     if (enable_transform_ && msg->header.frame_id != fixed_frame_) {
-      RCLCPP_INFO(this->get_logger(), "Transforming cloud from %s to %s", msg->header.frame_id.c_str(), fixed_frame_.c_str());
       try {
+        // RCLCPP_INFO(this->get_logger(), "msg-> header.stamp.sec: %u", msg->header.stamp.sec);
         geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
         fixed_frame_, msg->header.frame_id, rclcpp::Time(msg->header.stamp),
-        rclcpp::Duration::from_seconds(lookup_timeout_));
+        rclcpp::Duration::from_seconds(0.2));
+        // RCLCPP_INFO(this->get_logger(), "Transform found from %s to %s",
+                // msg->header.frame_id.c_str(), fixed_frame_.c_str());
         sensor_msgs::msg::PointCloud2 transformed;
         // Use generic tf2::doTransform (PointCloud2 specialization provided by tf2_sensor_msgs header)
         tf2::doTransform(*msg, transformed, t);
+        // RCLCPP_INFO(this->get_logger(), "PointCloud2 transformed to %s frame", fixed_frame_.c_str());
         transformed.header.frame_id = fixed_frame_;
         cloud = std::make_shared<sensor_msgs::msg::PointCloud2>(transformed);
         RCLCPP_DEBUG(this->get_logger(), "Transformed cloud from %s to %s", msg->header.frame_id.c_str(), fixed_frame_.c_str());
       } catch (const std::exception & e) {
-        RCLCPP_WARN(this->get_logger(), "TF lookup/transform failed: %s", e.what());
+        RCLCPP_INFO(this->get_logger(), "TF lookup/transform failed: %s", e.what());
         // fall back to original
       }
     }

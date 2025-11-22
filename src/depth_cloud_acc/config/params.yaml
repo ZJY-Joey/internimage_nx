@@ -9,11 +9,11 @@ depth_cloud_acc:
     publish_period: 0.1  # seconds
     max_clouds: 100  # number of raw clouds retained
     enable_transform: true
-    lookup_timeout: 0.5  # seconds
+    lookup_timeout: 0.2  # seconds
     log_every_n: 10
     max_aggregated_points: 10000000
     rebuild_keep_last_clouds: 50
-    aggregation_strategy: "rebuild"  # or 'truncate'
+    aggregation_strategy: "rebuild"  # or 'rebuild'  'truncate'
     input_frame:  'aft_mapped'
     output_frame: 'aft_mapped'
     leaf_size: 0.05
