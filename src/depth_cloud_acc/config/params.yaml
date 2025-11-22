@@ -14,9 +14,9 @@ depth_cloud_acc:
     max_aggregated_points: 10000000
     rebuild_keep_last_clouds: 50
     aggregation_strategy: "rebuild"  # or 'rebuild'  'truncate'
-    input_frame:  'aft_mapped'
-    output_frame: 'aft_mapped'
-    leaf_size: 0.05
+    input_frame:  'world'
+    output_frame: 'world'
+    leaf_size: 0.00001
     filter_field_name: 'z'
     filter_limit_min: -1000.0
     filter_limit_max: 1000.0

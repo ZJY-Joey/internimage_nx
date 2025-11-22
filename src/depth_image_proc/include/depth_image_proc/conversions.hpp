@@ -45,6 +45,7 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <iostream>
+#include <fstream>
 
 namespace depth_image_proc
 {
@@ -234,6 +235,8 @@ void convertDepthwithLabelAndConfidence(
   const T * depth_row = reinterpret_cast<const T *>(&depth_msg->data[0]);
   int row_step = depth_msg->step / sizeof(T);
   int count = 0;
+  // Collect unique labels seen in this frame so we can write them once per frame
+  std::unordered_set<int> seen_labels;
   for (int v = 0; v < static_cast<int>(cloud_msg->height); ++v, depth_row += row_step, id_ptr += id_skip, conf_ptr += conf_skip) {
     for (int u = 0; u < static_cast<int>(cloud_msg->width); ++u, ++iter_x, ++iter_y, ++iter_z, id_ptr += id_pixel_step, ++iter_label, conf_ptr += conf_pixel_step) {
       T depth = depth_row[u];
@@ -270,7 +273,8 @@ void convertDepthwithLabelAndConfidence(
         throw std::runtime_error("Unsupported label image encoding");
       }
       *iter_label = label_value;
-      // std::cout<<"label value: "<<static_cast<int>(label_value)<<std::endl;
+      // Track the label for a per-frame summary
+      seen_labels.insert(static_cast<int>(label_value));
       const bool in_set = (filter_labels.find(label_value) != filter_labels.end());
       const bool should_mask = filter_keep ? !in_set : in_set;
       if (should_mask) {
@@ -308,6 +312,29 @@ void convertDepthwithLabelAndConfidence(
 
     }
   }
+  // complie if in need
+  // char filename[ ] = "label_value.txt";
+  // std::fstream myFile(filename, std::fstream::out | std::fstream::app);
+  // // After processing the whole frame, write a single summary line listing unique labels
+  // if (myFile.is_open() || true) {
+  //   // Re-open for append if it was closed above (some platforms may have closed it earlier)
+  //   if (!myFile.is_open()) myFile.open(filename, std::fstream::out | std::fstream::app);
+  //   if (myFile.is_open()) {
+  //     // Use depth_msg timestamp if available
+  //     uint32_t sec = depth_msg->header.stamp.sec;
+  //     uint32_t nsec = depth_msg->header.stamp.nanosec;
+  //     myFile << sec << '.' << nsec << ' ';
+  //     bool first = true;
+  //     for (int lbl : seen_labels) {
+  //       if (!first) myFile << ',';
+  //       first = false;
+  //       const bool in_set = (filter_labels.find(static_cast<unsigned char>(lbl)) != filter_labels.end());
+  //       myFile << lbl << ':' << (in_set ? "in" : "out");
+  //     }
+  //     myFile << '\n';
+  //     myFile.close();
+  //   }
+  // }
   // std::cout<<"conf filter count: "<<count<<std::endl;
 }
 
