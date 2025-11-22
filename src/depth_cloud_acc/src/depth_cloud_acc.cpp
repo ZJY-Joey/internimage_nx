@@ -41,14 +41,14 @@ public:
     max_clouds_ = this->get_parameter("max_clouds").as_int();
     enable_transform_ = this->get_parameter("enable_transform").as_bool();
     lookup_timeout_ = this->get_parameter("lookup_timeout").as_double();
-  max_aggregated_points_ = this->get_parameter("max_aggregated_points").as_int();
-  rebuild_keep_last_clouds_ = this->get_parameter("rebuild_keep_last_clouds").as_int();
-  aggregation_strategy_ = this->get_parameter("aggregation_strategy").as_string();
-  log_every_n_ = this->get_parameter("log_every_n").as_int();
+    max_aggregated_points_ = this->get_parameter("max_aggregated_points").as_int();
+    rebuild_keep_last_clouds_ = this->get_parameter("rebuild_keep_last_clouds").as_int();
+    aggregation_strategy_ = this->get_parameter("aggregation_strategy").as_string();
+    log_every_n_ = this->get_parameter("log_every_n").as_int();
 
-  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-  // construct TransformListener with node pointer
-  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    // construct TransformListener with node pointer
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);
 
     // subscription with sensor data QoS
     rclcpp::SensorDataQoS qos;
@@ -56,10 +56,10 @@ public:
       input_topic_, qos,
       std::bind(&DepthCloudAccNode::pointcloud_callback, this, _1));
 
-  // publisher reliable
-  rclcpp::QoS pub_qos(10);
-  pub_qos.reliability(rclcpp::ReliabilityPolicy::Reliable);
-  publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, pub_qos);
+    // publisher reliable
+    rclcpp::QoS pub_qos(10);
+    pub_qos.reliability(rclcpp::ReliabilityPolicy::Reliable);
+    publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, pub_qos);
 
     // timer (milliseconds)
     auto period_ms = std::chrono::milliseconds(static_cast<int>(publish_period_ * 1000.0));
@@ -76,15 +76,17 @@ public:
 private:
   void pointcloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
   {
+    RCLCPP_INFO(this->get_logger(), "Received point cloud with %u points", msg->width);
     sensor_msgs::msg::PointCloud2::SharedPtr cloud = msg;
     if (enable_transform_ && msg->header.frame_id != fixed_frame_) {
+      RCLCPP_INFO(this->get_logger(), "Transforming cloud from %s to %s", msg->header.frame_id.c_str(), fixed_frame_.c_str());
       try {
         geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
-          fixed_frame_, msg->header.frame_id, rclcpp::Time(msg->header.stamp),
-          rclcpp::Duration::from_seconds(lookup_timeout_));
-  sensor_msgs::msg::PointCloud2 transformed;
-  // Use generic tf2::doTransform (PointCloud2 specialization provided by tf2_sensor_msgs header)
-  tf2::doTransform(*msg, transformed, t);
+        fixed_frame_, msg->header.frame_id, rclcpp::Time(msg->header.stamp),
+        rclcpp::Duration::from_seconds(lookup_timeout_));
+        sensor_msgs::msg::PointCloud2 transformed;
+        // Use generic tf2::doTransform (PointCloud2 specialization provided by tf2_sensor_msgs header)
+        tf2::doTransform(*msg, transformed, t);
         transformed.header.frame_id = fixed_frame_;
         cloud = std::make_shared<sensor_msgs::msg::PointCloud2>(transformed);
         RCLCPP_DEBUG(this->get_logger(), "Transformed cloud from %s to %s", msg->header.frame_id.c_str(), fixed_frame_.c_str());
@@ -93,6 +95,7 @@ private:
         // fall back to original
       }
     }
+    RCLCPP_INFO(this->get_logger(), "Adding cloud with %u points to aggregation", cloud->width);
 
     // append to deque and aggregated
     if (max_clouds_ > 0) {

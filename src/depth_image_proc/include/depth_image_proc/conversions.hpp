@@ -308,7 +308,7 @@ void convertDepthwithLabelAndConfidence(
 
     }
   }
-  std::cout<<"conf filter count: "<<count<<std::endl;
+  // std::cout<<"conf filter count: "<<count<<std::endl;
 }
 
 // Handles float or uint16 depths

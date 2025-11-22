@@ -97,7 +97,7 @@ def generate_launch_description():
                     parameters=[{
                         'use_sim_time': True,
                         'input_frame': 'aliengo',
-                        'output_frame': 'world',  
+                        'output_frame': 'aft_mapped',  
                         'filter_field_name': 'z',
                         'filter_limit_min': -1.0,
                         'filter_limit_max': 0.5,

@@ -34,15 +34,7 @@ def generate_launch_description():
                 package='pcl_ros',
                 plugin='pcl_ros::VoxelGrid',
                 name='voxel_grid_node',
-                parameters=[{
-                    'use_sim_time': LaunchConfiguration('use_sim_time'),
-                    'input_frame': 'world',
-                    'output_frame': 'world',
-                    'leaf_size': 0.05,
-                    'filter_field_name': 'z',
-                    'filter_limit_min': -1000.0,
-                    'filter_limit_max': 1000.0,
-                }],
+                parameters=[params_file],
                 remappings=[('input', '/internimage/segmentation/acc_global_map'),
                             ('output', '/internimage/segmentation/acc_global_map_voxelized')]
             ),
