@@ -78,7 +78,8 @@ private:
 
   // Publications
   std::mutex connect_mutex_;
-  rclcpp::Publisher<PointCloud2>::SharedPtr pub_point_cloud_, pub_point_cloud2_;
+  rclcpp::Publisher<PointCloud2>::SharedPtr pub_point_cloud_;
+  rclcpp::Publisher<PointCloud2>::SharedPtr pub_ground_point_cloud_;
 
   image_geometry::PinholeCameraModel model_;
 

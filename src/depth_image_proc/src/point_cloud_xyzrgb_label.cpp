@@ -117,7 +117,7 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
   // TODO(ros2) Implement connect_cb when SubscriberStatusCallback is available
   // pub_point_cloud_ = depth_nh.advertise<PointCloud>("points", 1, connect_cb, connect_cb);
   pub_point_cloud_ = create_publisher<PointCloud2>("points", rclcpp::SensorDataQoS());
-  pub_point_cloud2_ = create_publisher<PointCloud2>("points2", rclcpp::SensorDataQoS());
+  pub_ground_point_cloud_ = create_publisher<PointCloud2>("ground_points", rclcpp::SensorDataQoS());
   // TODO(ros2) Implement connect_cb when SubscriberStatusCallback is available
 }
 
@@ -397,32 +397,35 @@ void PointCloudXyzrgbLabelNode::imageCb(
   "z", 1, sensor_msgs::msg::PointField::FLOAT32,
   "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
   "label", 1, sensor_msgs::msg::PointField::UINT8);
+  pcd_modifier.resize(static_cast<uint32_t>(cloud_msg->width) * static_cast<uint32_t>(cloud_msg->height));
 
 
-  auto cloud_msg2 = std::make_shared<PointCloud2>();
-  cloud_msg2->header = depth_msg->header;  // Use depth image time stamp
-  cloud_msg2->height = depth_msg->height;
-  cloud_msg2->width = depth_msg->width;
-  cloud_msg2->is_dense = false;
-  cloud_msg2->is_bigendian = false;
-  sensor_msgs::PointCloud2Modifier pcd_modifier2(*cloud_msg2);
-  pcd_modifier2.setPointCloud2Fields(
-  5,
+  auto ground_cloud_msg = std::make_shared<PointCloud2>();
+  ground_cloud_msg->header = depth_msg->header;  // Use depth image time stamp
+  ground_cloud_msg->height = depth_msg->height;
+  ground_cloud_msg->width = depth_msg->width;
+  ground_cloud_msg->is_dense = false;
+  ground_cloud_msg->is_bigendian = false;
+  sensor_msgs::PointCloud2Modifier ground_pcd_modifier(*ground_cloud_msg);
+  ground_pcd_modifier.setPointCloud2Fields(
+  4,
   "x", 1, sensor_msgs::msg::PointField::FLOAT32,
   "y", 1, sensor_msgs::msg::PointField::FLOAT32,
   "z", 1, sensor_msgs::msg::PointField::FLOAT32,
-  "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
   "label", 1, sensor_msgs::msg::PointField::UINT8);
-
+  ground_pcd_modifier.resize(static_cast<uint32_t>(ground_cloud_msg->width) * static_cast<uint32_t>(ground_cloud_msg->height));
 
 
   if (!filter_labels_.empty()) {
     // convert depth image to pointcloud with condition filter of label
     if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
-      convertDepthwithLabelAndConfidence<uint16_t>(depth_msg, cloud_msg, id_msg, conf_msg, filter_labels_, filter_keep_, model_);
+      std::cout<<"convertDepthwithLabelAndConfidence - uint16_t"<<std::endl;
+      // publish ground cloud for octomap update in case missegmentation of internimage 
+      convertDepthwithLabelAndConfidence<uint16_t>(depth_msg, ground_cloud_msg, id_msg, conf_msg, filter_labels_, filter_keep_, model_);
+      convertDepthwithLabelAndConfidence<uint16_t>(depth_msg, cloud_msg, id_msg, conf_msg, filter_labels_, !filter_keep_, model_);
     } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
       convertDepthwithLabelAndConfidence<float>(depth_msg, cloud_msg, id_msg, conf_msg, filter_labels_, filter_keep_, model_);
-      convertDepthwithLabelAndConfidence<float>(depth_msg, cloud_msg2, id_msg, conf_msg, filter_labels_, !filter_keep_, model_);
+      convertDepthwithLabelAndConfidence<float>(depth_msg, ground_cloud_msg, id_msg, conf_msg, filter_labels_, !filter_keep_, model_);
     } else {
       RCLCPP_ERROR(
         get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
@@ -438,7 +441,6 @@ void PointCloudXyzrgbLabelNode::imageCb(
     //   return;
     // }
   }else{
-    throw std::runtime_error("no filter labels specified");
       // Convert Depth Image to Pointcloud
     if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
       convertDepth<uint16_t>(depth_msg, cloud_msg, model_);
@@ -507,26 +509,31 @@ void PointCloudXyzrgbLabelNode::imageCb(
 
 
   // //only convert rgb
-    if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8 || 
-      rgb_msg->encoding == sensor_msgs::image_encodings::BGR8 || 
-      rgb_msg->encoding == sensor_msgs::image_encodings::BGRA8 ||
-      rgb_msg->encoding == sensor_msgs::image_encodings::RGBA8 ||
-      rgb_msg->encoding == sensor_msgs::image_encodings::MONO8) {
+    if (rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) {
     convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
-    convertRgb(rgb_msg, cloud_msg2, red_offset, green_offset, blue_offset, color_step);
+  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGR8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::BGRA8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::RGBA8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
+  } else if (rgb_msg->encoding == sensor_msgs::image_encodings::MONO8) {
+    convertRgb(rgb_msg, cloud_msg, red_offset, green_offset, blue_offset, color_step);
   } else {
     RCLCPP_ERROR(
       get_logger(), "RGB image has unsupported encoding [%s]", rgb_msg->encoding.c_str());
     return;
   }
 
-  // RCLCPP_INFO(
-  //     get_logger(), "publishing point cloud with label channel, width: %d, height: %d",
-  //     cloud_msg->width, cloud_msg->height);
-  // RCLCPP_INFO(
-  //     get_logger(), "cloud msg size: %d", static_cast<int>(cloud_msg->data.size()));
+
+  RCLCPP_INFO(
+      get_logger(), "publishing point cloud with ground points, width: %d, height: %d",
+      ground_cloud_msg->width, ground_cloud_msg->height);
+  RCLCPP_INFO(
+      get_logger(), "ground cloud msg size: %d", static_cast<int>(ground_cloud_msg->data.size()));
+
   pub_point_cloud_->publish(*cloud_msg);
-  pub_point_cloud2_->publish(*cloud_msg2);
+  pub_ground_point_cloud_->publish(*ground_cloud_msg);
 }
 
 }  // namespace depth_image_proc
