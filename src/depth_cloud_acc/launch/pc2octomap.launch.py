@@ -24,6 +24,7 @@ def generate_launch_description():
             'frame_id': 'world',
             'resolution': 0.05,
             'sensor_model/max_range': 5.0,
+            'filter_ground': True,
 
         }], 
         remappings=[('cloud_in', '/internimage/segmentation/filtered/points')],
