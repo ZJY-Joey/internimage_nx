@@ -27,12 +27,6 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/convert_metric.cpp
   src/crop_foremost.cpp
   src/disparity.cpp
-  src/point_cloud_xyz.cpp
-  src/point_cloud_xyzrgb.cpp
-  src/point_cloud_xyzi.cpp
-  src/point_cloud_xyz_radial.cpp
-  src/point_cloud_xyzi_radial.cpp
-  src/point_cloud_xyzrgb_radial.cpp
   src/point_cloud_xyzrgb_label.cpp
   src/register.cpp
 )
@@ -51,32 +45,8 @@ rclcpp_components_register_node(${PROJECT_NAME}
   EXECUTABLE disparity_node
 )
 rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "depth_image_proc::PointCloudXyzNode"
-  EXECUTABLE point_cloud_xyz_node
-)
-rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "depth_image_proc::PointCloudXyzrgbNode"
-  EXECUTABLE point_cloud_xyzrgb_node
-)
-rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN "depth_image_proc::PointCloudXyzrgbLabelNode"
   EXECUTABLE point_cloud_xyzrgb_label_node
-)
-rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "depth_image_proc::PointCloudXyziNode"
-  EXECUTABLE point_cloud_xyzi_node
-)
-rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "depth_image_proc::PointCloudXyzRadialNode"
-  EXECUTABLE point_cloud_xyz_radial_node
-)
-rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "depth_image_proc::PointCloudXyziRadialNode"
-  EXECUTABLE point_cloud_xyzi_radial_node
-)
-rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "depth_image_proc::PointCloudXyziRadialNode"
-  EXECUTABLE point_cloud_xyzrgb_radial_node
 )
 rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN "depth_image_proc::RegisterNode"

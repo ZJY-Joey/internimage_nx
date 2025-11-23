@@ -201,9 +201,9 @@ class InternImageNode(Node):
         self.image_topic = self.get_parameter("image_topic").get_parameter_value().string_value
         self.declare_parameter("result_topic","/zed/zed_node/rgb/color/rect/image/compressed/internimage/segmented")
         self.result_topic = self.get_parameter("result_topic").get_parameter_value().string_value
-        self.declare_parameter("model_name","upernet_internimage_s_300x480_int8fp16")
+        self.declare_parameter("model_name","upernet_internimage_xl_600x960_fp16")
         self.model_name = self.get_parameter("model_name").get_parameter_value().string_value
-        self.declare_parameter("default_data_dir","/home/jetson/workspaces/segmentation_ws/models/internimage_s/")
+        self.declare_parameter("default_data_dir","/home/jetson/atec/internimage_ws/models/internimage_xl")
         default_data_dir = self.get_parameter('default_data_dir').get_parameter_value().string_value            
         # publish internimage result topic
         self.internimage_pub = self.create_publisher(CompressedImage, self.result_topic, 10)  

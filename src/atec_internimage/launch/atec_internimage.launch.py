@@ -34,9 +34,8 @@ def generate_launch_description():
         get_package_share_directory('depth_image_proc'), 'launch', 'point_cloud_xyzrgb_label.launch.py'
     )
     depth_proc_node = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(depth_proc_launch_file_path),
-            launch_arguments={'use_sim_time': use_sim_time }.items(),
-            # namespace='my_namespace'
+        PythonLaunchDescriptionSource(depth_proc_launch_file_path),
+        launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
 
     # depth cloud accumulation and voxel
@@ -44,9 +43,8 @@ def generate_launch_description():
         get_package_share_directory('depth_cloud_acc'), 'launch', 'depth_cloud_acc.launch.py'
     )
     depth_cloud_acc_node = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(depth_cloud_acc_launch_file_path),
-            launch_arguments={'use_sim_time': use_sim_time }.items(),
-            # namespace='my_namespace'
+        PythonLaunchDescriptionSource(depth_cloud_acc_launch_file_path),
+        launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
 
 
@@ -55,12 +53,9 @@ def generate_launch_description():
         get_package_share_directory('depth_cloud_acc'), 'launch', 'pc2octomap.launch.py'
     )
     depth_cloud_octomap_node = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(depth_cloud_octomap_launch_file_path),
-            launch_arguments={'use_sim_time': use_sim_time }.items(),
-            # namespace='my_namespace'
+        PythonLaunchDescriptionSource(depth_cloud_octomap_launch_file_path),
+        launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
-
-
     
     
     ld = LaunchDescription([
