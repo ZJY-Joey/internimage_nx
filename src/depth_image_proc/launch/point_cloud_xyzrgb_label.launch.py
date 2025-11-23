@@ -82,7 +82,8 @@ def generate_launch_description():
                                 ('id/image_rect_id', '/internimage/id_segmentation_mask'),
                                 ('confidence/image_rect_confidence', '/zed/zed_node/confidence/confidence_map'), # /zed/zed_node/depth/depth_registered/decompressed  /zed/zed_node/confidence/confidence_map/decompressedConfidence
                                 ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered/decompressed'), #   /zed/zed_node/depth/depth_registered
-                                ('points', '/internimage/segmentation/projected/points')]
+                                ('points', '/internimage/segmentation/projected/points'),
+                                ('points2', '/internimage/segmentation/projected/points2')]
                 ),
                 
 
