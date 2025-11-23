@@ -76,7 +76,7 @@ public:
 private:
   void pointcloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
   {
-    RCLCPP_INFO(this->get_logger(), "Received point cloud with %u points", msg->width);
+    // RCLCPP_INFO(this->get_logger(), "Received point cloud with %u points", msg->width);
     sensor_msgs::msg::PointCloud2::SharedPtr cloud = msg;
     if (enable_transform_ && msg->header.frame_id != fixed_frame_) {
       try {
@@ -98,7 +98,7 @@ private:
         // fall back to original
       }
     }
-    RCLCPP_INFO(this->get_logger(), "Adding cloud with %u points to aggregation", cloud->width);
+    // RCLCPP_INFO(this->get_logger(), "Adding cloud with %u points to aggregation", cloud->width);
 
     // append to deque and aggregated
     if (max_clouds_ > 0) {

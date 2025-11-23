@@ -372,7 +372,7 @@ class InternImageNode(Node):
         return msg
     
     def _image_callback(self, msg):
-        t0 = time.time_ns()
+        # t0 = time.time_ns()
         try:
             # Decode incoming ROS image (CompressedImage or Image) into an OpenCV BGR ndarray
             if isinstance(msg, CompressedImage):
@@ -385,14 +385,14 @@ class InternImageNode(Node):
             else:
                 raise TypeError(f"Unsupported image message type: {type(msg)}, please publish Image or CompressedImage")
             
-            t1 = time.time_ns()
-            self.get_logger().info(f'Image decoding time: {(t1 - t0) / 1e6:.3f} ms')
+            # t1 = time.time_ns()
+            # self.get_logger().info(f'Image decoding time: {(t1 - t0) / 1e6:.3f} ms')
             # print("cv_image received, shape:", cv_image.shape) #( h w c)
             # Fast preprocess (BGR -> RGB, resize, normalize) directly into TensorRT host buffer
             self._preprocess_to_trt_input(cv_image)
-            t2 = time.time_ns()
-            elapsed_ms = (t2 - t1) / 1e6
-            self.get_logger().info(f'Preprocessing time: {elapsed_ms:.3f} ms')
+            # t2 = time.time_ns()
+            # elapsed_ms = (t2 - t1) / 1e6
+            # self.get_logger().info(f'Preprocessing time: {elapsed_ms:.3f} ms')
 
         except Exception as e:
             self.get_logger().error(f'Error during imagecallback: {e}')
@@ -401,10 +401,10 @@ class InternImageNode(Node):
         # Mark new image available for inference and bump sequence counter
         self._last_image_seq += 1
         self._new_image_available = True
-        t3 = time.time_ns()
+        # t3 = time.time_ns()
         # check inference total time
-        elapsed_ms = (t3 - t0) / 1e6
-        self.get_logger().info(f'toatal image callback time: {elapsed_ms:.3f} ms')
+        # elapsed_ms = (t3 - t0) / 1e6
+        # self.get_logger().info(f'toatal image callback time: {elapsed_ms:.3f} ms')
 
 
     def _preprocess_to_trt_input(self, bgr_image):
@@ -572,7 +572,7 @@ class InternImageNode(Node):
                     self.get_logger().error(f'Failed to visualize/publish overlay segmentation: {ex}')
             t5 = time.time_ns()
             total_ms = (t5 - t4) / 1e6    
-            self.get_logger().info(f'publish time: {total_ms:.3f} ms')
+            # self.get_logger().info(f'publish time: {total_ms:.3f} ms')
             # Update gating state: mark this image as processed
             self._last_inferred_seq = self._last_image_seq
             self._new_image_available = False

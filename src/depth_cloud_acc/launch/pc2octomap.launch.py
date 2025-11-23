@@ -10,17 +10,18 @@ from launch_ros.actions import Node, ComposableNodeContainer
 def generate_launch_description():
 
     use_sim_time_arg = DeclareLaunchArgument(
-        'use_sim_time', default_value='True',
+        'use_sim_time', default_value='False',
         description='Use simulation time if available.'
     )
 
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
     octomap_node = Node(
         package='octomap_server',
         executable='octomap_server_node',
         name='octomap_server',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'use_sim_time': use_sim_time,
             'frame_id': 'world',
             'resolution': 0.05,
             'sensor_model/max_range': 5.0,

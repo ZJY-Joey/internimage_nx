@@ -19,9 +19,11 @@ def generate_launch_description():
         description='Publish period (seconds) for aggregated map.'
     )
     use_sim_time_arg = DeclareLaunchArgument(
-        'use_sim_time', default_value='True',
+        'use_sim_time', default_value='False',
         description='Use simulation time if available.'
     )
+
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
 
     container_pro_map = ComposableNodeContainer(
@@ -36,7 +38,7 @@ def generate_launch_description():
                 name='voxel_grid_node',
                 parameters=[
                     {
-                        'use_sim_time': True,
+                        'use_sim_time': use_sim_time,
                         'input_frame': 'world',
                         'output_frame': 'world',  
                         'leaf_size': 0.03,
@@ -58,7 +60,7 @@ def generate_launch_description():
         name='depth_cloud_acc',
         parameters=[params_file, {
             'publish_period': LaunchConfiguration('publish_period'),
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'use_sim_time': use_sim_time,
         }],
         output='screen'
     )

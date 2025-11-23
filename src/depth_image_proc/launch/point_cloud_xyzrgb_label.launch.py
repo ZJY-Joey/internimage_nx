@@ -35,12 +35,26 @@ from launch import LaunchDescription
 
 import launch_ros.actions
 import launch_ros.descriptions
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.actions import DeclareLaunchArgument
 
 
 def generate_launch_description():
     # default_rviz = os.path.join(get_package_share_directory('depth_image_proc'),
     #                             'launch', 'rviz/point_cloud_xyzrgb.rviz')
+
+    use_sim_time_arg = DeclareLaunchArgument(
+            'use_sim_time',
+            default_value='False',
+            description='Use simulation time if available.'
+        )
+
+    use_sim_time = LaunchConfiguration("use_sim_time")
+
     return LaunchDescription([
+
+        use_sim_time_arg,
+
         # install realsense from https://github.com/intel/ros2_intel_realsense
         # launch_ros.actions.Node(
         #     package='realsense_ros2_camera', executable='realsense_ros2_camera',
@@ -59,7 +73,7 @@ def generate_launch_description():
                     plugin='depth_image_proc::PointCloudXyzrgbLabelNode',
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
-                        'use_sim_time': True,
+                        'use_sim_time': use_sim_time,
                         'filter_labels': [3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 95, 120],   # 3, 6, 9, 11, 12, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路    # 15,19,30,33,64,97,110,111, 138
                         'filter_keep': False,   # drop specified labels
                     }],
@@ -77,7 +91,7 @@ def generate_launch_description():
                     plugin='pcl_ros::VoxelGrid',
                     name='voxel_grid_node',
                     parameters=[{
-                        'use_sim_time': True,
+                        'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
                         'output_frame': 'aliengo',  
                         'leaf_size': 0.05,
@@ -95,7 +109,7 @@ def generate_launch_description():
                     plugin='pcl_ros::PassThrough',
                     name='passthrough_filter_node',
                     parameters=[{
-                        'use_sim_time': True,
+                        'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
                         'output_frame': 'aliengo',  
                         'filter_field_name': 'z',
@@ -121,7 +135,7 @@ def generate_launch_description():
             #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
             #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
             parameters=[{
-                'use_sim_time': True,
+                'use_sim_time': use_sim_time,
                 'in_transport': 'compressedDepth',
                 'out_transport': 'raw',
                 # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
@@ -149,7 +163,7 @@ def generate_launch_description():
             #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
             #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
             parameters=[{
-                'use_sim_time': True,
+                'use_sim_time': use_sim_time,
                 'in_transport': 'compressedDepth',
                 'out_transport': 'raw',
                 # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
