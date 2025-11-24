@@ -40,8 +40,8 @@ public:
   {
     try {
       auto response = future.get();
-      (void)response; // Not used currently
-      RCLCPP_INFO(this->get_logger(), "Service call successful. Octomap BBox cleared.");
+      (void)response;
+      // RCLCPP_INFO(this->get_logger(), "Service call successful. Octomap BBox cleared.");
     } catch (const std::exception & e) {
       RCLCPP_ERROR(this->get_logger(), "Service response exception: %s", e.what());
     }
@@ -52,7 +52,6 @@ public:
     double max_x, double max_y, double max_z)
   {
     if (!service_client_->service_is_ready()) {
-      // Non-blocking: avoid spinning a new executor inside a callback
       RCLCPP_WARN(this->get_logger(), "Service /octomap_server/clear_bbox not ready yet; skipping this bbox.");
       return;
     }
@@ -66,8 +65,8 @@ public:
     request->max.y = max_y;
     request->max.z = max_z;
 
-    RCLCPP_INFO(this->get_logger(), "Sending request to clear BBox from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
-      min_x, min_y, min_z, max_x, max_y, max_z);
+    // RCLCPP_INFO(this->get_logger(), "Sending request to clear BBox from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+      // min_x, min_y, min_z, max_x, max_y, max_z);
 
     // send request
     auto result_future = service_client_->async_send_request(
@@ -114,6 +113,7 @@ public:
           call_clear_bbox_service(min_x, min_y, min_z, max_x, max_y, max_z);
 
       }
+      RCLCPP_INFO(this->get_logger(), "Processed %zu points from PointCloud2 message.", msg->width * msg->height);
     // for(size_t i=0; i < msg->data.size(); i += msg->point_step){
     //   float x = *reinterpret_cast<const float*>(&msg->data[i + msg->fields[0].offset]);
     //   float y = *reinterpret_cast<const float*>(&msg->data[i + msg->fields[1].offset]);
