@@ -73,9 +73,9 @@ def generate_launch_description():
                     plugin='depth_image_proc::PointCloudXyzrgbLabelNode',
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
-                        'use_sim_time': use_sim_time,
-                        'filter_labels': [3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 95, 120],   # 3, 6, 9, 11, 12, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路    # 15,19,30,33,64,97,110,111, 138
-                        'filter_keep': False,   # drop specified labels
+                        'use_sim_time': use_sim_time, #  3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 95, 120
+                        'filter_labels': [15],   # 3, 6, 9, 11, 12, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路    # 15,19,30,33,64,97,110,111, 138
+                        'filter_keep': True,   # drop specified labels
                     }],
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
                                 ('rgb/image_rect_color', '/internimage/color_segmentation_mask'),
@@ -119,6 +119,25 @@ def generate_launch_description():
                     }],
                     remappings=[('input', '/internimage/segmentation/voxel/points'),
                                 ('output', '/internimage/segmentation/filtered/points')]
+                ),
+
+
+                launch_ros.descriptions.ComposableNode(
+                    package='pcl_ros',
+                    plugin='pcl_ros::VoxelGrid',
+                    name='voxel_grid_node_ground',
+                    parameters=[{
+                        'use_sim_time': use_sim_time,
+                        'input_frame': 'aliengo',
+                        'output_frame': 'aliengo',  
+                        'leaf_size': 0.4,
+                        'filter_field_name': 'z',
+                        'filter_limit_min': -1000.0,
+                        'filter_limit_max': 1000.0,
+                        # 'min_points_per_voxel': 100,
+                    }],
+                    remappings=[('input', '/internimage/segmentation/ground_points'),
+                                ('output', '/internimage/segmentation/ground_points/voxel')]
                 ),
             ],
             output='screen',

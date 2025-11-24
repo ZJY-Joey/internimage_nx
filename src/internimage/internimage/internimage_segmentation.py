@@ -268,8 +268,8 @@ class InternImageNode(Node):
         self.declare_parameter('publish_combined', False)
         self.declare_parameter('combined_target_height', 600)
         self.declare_parameter('combined_target_width', 960)
-        self.declare_parameter('trt_h', 300)
-        self.declare_parameter('trt_w', 480)
+        self.declare_parameter('trt_h', 600)
+        self.declare_parameter('trt_w', 960)
         self.declare_parameter('mean', [123.675, 116.28, 103.53])
         self.declare_parameter('std', [58.395, 57.12, 57.375])
         self.declare_parameter('_inv_std', [0.017, 0.0175, 0.0173])  # for reference only; computed internally

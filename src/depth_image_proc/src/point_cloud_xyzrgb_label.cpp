@@ -250,7 +250,7 @@ void PointCloudXyzrgbLabelNode::imageCb(
     cv_rsz.encoding = cv_ptr->encoding;
     cv::resize(
       cv_ptr->image.rowRange(0, depth_msg->height / ratio), cv_rsz.image,
-      cv::Size(depth_msg->width, depth_msg->height));
+      cv::Size(depth_msg->width, depth_msg->height), 0, 0, cv::INTER_NEAREST);
     if ((rgb_msg->encoding == sensor_msgs::image_encodings::RGB8) ||
       (rgb_msg->encoding == sensor_msgs::image_encodings::BGR8) ||
       (rgb_msg->encoding == sensor_msgs::image_encodings::MONO8))
@@ -287,7 +287,7 @@ void PointCloudXyzrgbLabelNode::imageCb(
     cv_rsz.encoding = cv_ptr->encoding;
     cv::resize(
       cv_ptr->image.rowRange(0, depth_msg->height / ratio), cv_rsz.image,
-      cv::Size(depth_msg->width, depth_msg->height));
+      cv::Size(depth_msg->width, depth_msg->height), 0, 0, cv::INTER_NEAREST);
     if ((conf_msg->encoding == sensor_msgs::image_encodings::RGB8) ||
       (conf_msg->encoding == sensor_msgs::image_encodings::BGR8) ||
       (conf_msg->encoding == sensor_msgs::image_encodings::MONO8)) {
@@ -526,11 +526,11 @@ void PointCloudXyzrgbLabelNode::imageCb(
   }
 
 
-  RCLCPP_INFO(
-      get_logger(), "publishing point cloud with ground points, width: %d, height: %d",
-      ground_cloud_msg->width, ground_cloud_msg->height);
-  RCLCPP_INFO(
-      get_logger(), "ground cloud msg size: %d", static_cast<int>(ground_cloud_msg->data.size()));
+  // RCLCPP_INFO(
+  //     get_logger(), "publishing point cloud with ground points, width: %d, height: %d",
+  //     ground_cloud_msg->width, ground_cloud_msg->height);
+  // RCLCPP_INFO(
+  //     get_logger(), "ground cloud msg size: %d", static_cast<int>(ground_cloud_msg->data.size()));
 
   pub_point_cloud_->publish(*cloud_msg);
   pub_ground_point_cloud_->publish(*ground_cloud_msg);
