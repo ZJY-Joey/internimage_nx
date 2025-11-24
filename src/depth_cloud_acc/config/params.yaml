@@ -10,7 +10,7 @@ depth_cloud_acc:
     enable_transform: true
     lookup_timeout: 0.2  # seconds
     log_every_n: 10
-    max_aggregated_points: 10000000
+    max_aggregated_points: 1000000
     rebuild_keep_last_clouds: 50
     aggregation_strategy: "rebuild"  # or 'rebuild = slide window'  'truncate = keep old map without update'
     input_frame:  'world'

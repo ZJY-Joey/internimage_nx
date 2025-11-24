@@ -41,7 +41,7 @@ def generate_launch_description():
                         'use_sim_time': use_sim_time,
                         'input_frame': 'world',
                         'output_frame': 'world',  
-                        'leaf_size': 0.03,
+                        'leaf_size': 0.1,
                         'filter_field_name': 'z',
                         'filter_limit_min': -1000.0,
                         'filter_limit_max': 1000.0,

@@ -95,7 +95,7 @@ def generate_launch_description():
                         'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
                         'output_frame': 'aliengo',  
-                        'leaf_size': 0.05,
+                        'leaf_size': 0.2,
                         'filter_field_name': 'z',
                         'filter_limit_min': -1000.0,
                         'filter_limit_max': 1000.0,
@@ -129,7 +129,7 @@ def generate_launch_description():
                     parameters=[{
                         'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
-                        'output_frame': 'aliengo',  
+                        'output_frame': 'world',  
                         'leaf_size': 0.4,
                         'filter_field_name': 'z',
                         'filter_limit_min': -1000.0,
