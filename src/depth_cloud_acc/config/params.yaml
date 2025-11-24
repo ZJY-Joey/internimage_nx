@@ -1,6 +1,5 @@
 depth_cloud_acc:
   ros__parameters:
-    use_sim_time: true
     # subscribe topics
     input_depth_points_topic: "/internimage/segmentation/filtered/points"
     output_depth_points_topic: "/internimage/segmentation/acc_global_map"
