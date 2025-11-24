@@ -56,14 +56,24 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(depth_cloud_octomap_launch_file_path),
         launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
-    
-    
+
+    # octomap update clear bbox node
+    octomap_update_launch_file_path = os.path.join(
+        get_package_share_directory('octomap_update'), 'launch', 'octomap_update.launch.py'
+    )
+    octomap_update_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(octomap_update_launch_file_path),
+        launch_arguments={'use_sim_time': use_sim_time }.items(),
+    )
+
+
     ld = LaunchDescription([
         use_sim_time_arg,
         internimage_node,
         depth_proc_node,
         depth_cloud_acc_node,
         depth_cloud_octomap_node,
+        octomap_update_node,
     ])
     return ld
         
