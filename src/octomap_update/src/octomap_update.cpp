@@ -102,7 +102,7 @@ public:
           float y = *iter_y;
           float z = *iter_z;
 
-          float bbox_size = 0.05; 
+          float bbox_size = 0.10; 
           float min_x = x - bbox_size / 2;
           float min_y = y - bbox_size / 2;
           float min_z = z - bbox_size / 2;
@@ -113,7 +113,7 @@ public:
           call_clear_bbox_service(min_x, min_y, min_z, max_x, max_y, max_z);
 
       }
-      RCLCPP_INFO(this->get_logger(), "Processed %zu points from PointCloud2 message.", msg->width * msg->height);
+      // RCLCPP_INFO(this->get_logger(), "Processed %zu points from PointCloud2 message.", msg->width * msg->height);
     // for(size_t i=0; i < msg->data.size(); i += msg->point_step){
     //   float x = *reinterpret_cast<const float*>(&msg->data[i + msg->fields[0].offset]);
     //   float y = *reinterpret_cast<const float*>(&msg->data[i + msg->fields[1].offset]);
