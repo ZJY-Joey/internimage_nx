@@ -462,7 +462,7 @@ class InternImageNode(Node):
             )
             end_ns = time.time_ns()
             elapsed_ms = (end_ns - start_ns) / 1e6
-            self.get_logger().info(f'Inference time: {elapsed_ms:.3f} ms')
+            # self.get_logger().info(f'Inference time: {elapsed_ms:.3f} ms')
 
             # print("trt_shape:", trt_outputs[0].shape)
             # print("trt_outputs[0] dtype:", trt_outputs[0].dtype)
