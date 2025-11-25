@@ -31,6 +31,9 @@ public:
     // Use default Services QoS (reliable) instead of SensorDataQoS (best-effort) to ensure matching
     service_client_ = this->create_client<BBoxSrv>("/octomap_server/clear_bbox", rclcpp::ServicesQoS(), cli_group_cb);
 
+    this->declare_parameter<float>("bbox_size", 0.10); 
+    bbox_size = this->get_parameter("bbox_size").as_double();
+
     
   }
 
@@ -102,7 +105,7 @@ public:
           float y = *iter_y;
           float z = *iter_z;
 
-          float bbox_size = 0.10; 
+          float bbox_size = this->get_parameter("bbox_size").as_double();
           float min_x = x - bbox_size / 2;
           float min_y = y - bbox_size / 2;
           float min_z = z - bbox_size / 2;
@@ -126,6 +129,7 @@ public:
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_;
   rclcpp::Client<BBoxSrv>::SharedPtr service_client_;
   rclcpp::CallbackGroup::SharedPtr cli_group_cb;
+  float bbox_size;
 
 };
 
