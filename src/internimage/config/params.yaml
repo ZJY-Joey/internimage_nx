@@ -9,7 +9,7 @@ internimage:
     color_segmentation_topic: "/internimage/color_segmentation_mask"
     id_segmentation_topic: "/internimage/id_segmentation_mask"
     # combine segmentation info with original image  limit:classes<255 or combined info will be incorrect
-    publish_combined: false   # whether to publish combined segmentation result
+    publish_combined: true   # whether to publish combined segmentation result
     combined_target_height: 600
     combined_target_width: 960
     combined_segmentation_topic: "/internimage/combined_segmentation_mask"

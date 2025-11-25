@@ -265,7 +265,7 @@ class InternImageNode(Node):
         self.declare_parameter('output_format', 'jpeg')  # 'jpeg' or 'png'
         self.declare_parameter('jpeg_quality', 80)
         # Combined matrix publish control (segmentation + color)
-        self.declare_parameter('publish_combined', False)
+        self.declare_parameter('publish_combined', True)
         self.declare_parameter('combined_target_height', 600)
         self.declare_parameter('combined_target_width', 960)
         self.declare_parameter('trt_h', 600)

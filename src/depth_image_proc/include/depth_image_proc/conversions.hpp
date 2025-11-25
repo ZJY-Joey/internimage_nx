@@ -338,6 +338,139 @@ void convertDepthwithLabelAndConfidence(
   // std::cout<<"conf filter count: "<<count<<std::endl;
 }
 
+template<typename T>
+void convertDepthwithCombinedmsg(
+  const sensor_msgs::msg::Image::ConstSharedPtr & depth_msg,
+  sensor_msgs::msg::PointCloud2::SharedPtr & cloud_msg,
+  const sensor_msgs::msg::Image::ConstSharedPtr & combined_msg,
+  const sensor_msgs::msg::Image::ConstSharedPtr & conf_msg,
+  std::unordered_set<unsigned char> filter_labels,
+  bool filter_keep,
+  const image_geometry::PinholeCameraModel & model,
+  int red_offset, int green_offset, int blue_offset, int color_step,
+  double range_max = 0.0)
+  {
+
+  // std::cout<<"call convertDepthwithCombinedmsg"<<std::endl;
+  // Use correct principal point from calibration
+  float center_x = model.cx();
+  float center_y = model.cy();
+
+  // Combine unit conversion (if necessary) with scaling by focal length for computing (X,Y)
+  double unit_scaling = DepthTraits<T>::toMeters(T(1) );
+  float constant_x = unit_scaling / model.fx();
+  float constant_y = unit_scaling / model.fy();
+  float bad_point = std::numeric_limits<float>::quiet_NaN();
+
+  sensor_msgs::PointCloud2Iterator<float> iter_x(*cloud_msg, "x");
+  sensor_msgs::PointCloud2Iterator<float> iter_y(*cloud_msg, "y");
+  sensor_msgs::PointCloud2Iterator<float> iter_z(*cloud_msg, "z");  
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_r(*cloud_msg, "r");
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_g(*cloud_msg, "g");
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_b(*cloud_msg, "b");
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_label(*cloud_msg, "label");
+  const uint8_t * combined_ptr = &combined_msg->data[0];
+
+  // Best-effort bytes-per-pixel for combined image (supports 8U/16U/32S typical encodings)
+  int combined_pixel_step = static_cast<int>(combined_msg->step / combined_msg->width);
+  if (combined_pixel_step <= 0) {
+    combined_pixel_step = 1;  // fallback for safety
+  }
+  int combined_skip = static_cast<int>(combined_msg->step - combined_msg->width * combined_pixel_step);
+
+  const uint8_t * conf_ptr = &conf_msg->data[0];
+
+  // Best-effort bytes-per-pixel for id image (supports 8U/16U/32S typical encodings)
+  int conf_pixel_step = static_cast<int>(conf_msg->step / conf_msg->width);
+  if (conf_pixel_step <= 0) {
+    conf_pixel_step = 1;  // fallback for safety
+  }
+  int conf_skip = static_cast<int>(conf_msg->step - conf_msg->width * conf_pixel_step);
+
+  const T * depth_row = reinterpret_cast<const T *>(&depth_msg->data[0]);
+  int row_step = depth_msg->step / sizeof(T);
+  int count = 0;
+  // Collect unique labels seen in this frame so we can write them once per frame
+  std::unordered_set<int> seen_labels;
+  for (int v = 0; v < static_cast<int>(cloud_msg->height); ++v, depth_row += row_step, combined_ptr += combined_skip, conf_ptr += conf_skip) {
+    for (int u = 0; u < static_cast<int>(cloud_msg->width); ++u, ++iter_x, ++iter_y, ++iter_z, ++iter_r, ++iter_g, ++iter_b, combined_ptr += combined_pixel_step, ++iter_label, conf_ptr += conf_pixel_step) {
+      T depth = depth_row[u];
+
+      // Missing points denoted by NaNs
+      if (!DepthTraits<T>::valid(depth)) {
+        if (range_max != 0.0) {
+          depth = DepthTraits<T>::fromMeters(range_max);
+        } else {
+          *iter_x = *iter_y = *iter_z = bad_point;
+          continue;
+        }
+      }
+
+      // Fill in XYZ
+      *iter_x = (u - center_x) * depth * constant_x;
+      *iter_y = (v - center_y) * depth * constant_y;
+      *iter_z = DepthTraits<T>::toMeters(depth);
+
+      // std::cout<<"x: "<<*iter_x<<" y: "<<*iter_y<<" z: "<<*iter_z<<std::endl;
+
+      
+      // Semantic label: for RGBA8, the 4th channel (A) carries the label per pixel.
+      // Validate that we indeed have 4 bytes per pixel.
+      if (combined_pixel_step != 4) {
+        throw std::runtime_error("convertDepthwithCombinedmsg expects RGBA8 (4 bytes per pixel) for combined_msg");
+      }
+      const int label_offset = 3;  // RGBA8 -> A channel index
+      *iter_label = combined_ptr[label_offset];
+      // Track the label for a per-frame summary
+      seen_labels.insert(static_cast<int>(*iter_label));
+      const bool in_set = (filter_labels.find(*iter_label) != filter_labels.end());
+      const bool should_mask = filter_keep ? !in_set : in_set;
+      if (should_mask) {
+        *iter_x = bad_point;
+        *iter_y = bad_point;
+        *iter_z = bad_point;
+      }
+
+      // rgb values
+      *iter_r = combined_ptr[red_offset];
+      *iter_g = combined_ptr[green_offset];
+      *iter_b = combined_ptr[blue_offset];
+
+      // std::cout<<"r: "<<static_cast<int>(*iter_r)<<" g: "<<static_cast<int>(*iter_g)<<" b: "<<static_cast<int>(*iter_b)<<std::endl;
+
+      // Confidence value filter
+      float conf_value = 0;
+      if (conf_pixel_step == 1) {
+        conf_value = conf_ptr[0];
+      } else if (conf_pixel_step == 2) {
+        uint16_t v16 = 0;
+        std::memcpy(&v16, conf_ptr, sizeof(uint16_t));
+        conf_value = static_cast<float>(v16);
+      } else if (conf_pixel_step == 4) {
+        // Covers 32-bit integer labels; truncate to 8-bit as classes < 155
+        float v32 = 0;
+        std::memcpy(&v32, conf_ptr, sizeof(float));
+        conf_value = static_cast<float>(v32);
+      } else {
+        throw std::runtime_error("Unsupported confidence image encoding");
+      }
+      // std::cout<<"conf value: "<<static_cast<int>(conf_value)<<std::endl;
+      if (conf_value > 30) {  // threshold can be parameterized
+        count++;
+        *iter_x = bad_point;
+        *iter_y = bad_point;
+        *iter_z = bad_point;
+      }
+
+      
+      
+
+    }
+  }
+
+
+  }
+
 // Handles float or uint16 depths
 template<typename T>
 void convertDepthRadial(
