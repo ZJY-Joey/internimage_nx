@@ -35,7 +35,7 @@ def generate_launch_description():
             launch_ros.descriptions.ComposableNode(
                 package='pcl_ros',
                 plugin='pcl_ros::VoxelGrid',
-                name='voxel_grid_node',
+                name='voxel_grid_node_acc_map',
                 parameters=[
                     {
                         'use_sim_time': use_sim_time,

@@ -28,7 +28,7 @@ def generate_launch_description():
             # 'filter_ground': True,
 
         }], 
-        remappings=[('cloud_in', '/internimage/segmentation/filtered/points')],
+        remappings=[('cloud_in', '/internimage/segmentation/voxel/filtered/points')],
 
     )
     
