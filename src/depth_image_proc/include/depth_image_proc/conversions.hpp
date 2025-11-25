@@ -392,6 +392,7 @@ void convertDepthwithCombinedmsg(
   int count = 0;
   // Collect unique labels seen in this frame so we can write them once per frame
   std::unordered_set<int> seen_labels;
+  // float max_conf = 0.0;
   for (int v = 0; v < static_cast<int>(cloud_msg->height); ++v, depth_row += row_step, combined_ptr += combined_skip, conf_ptr += conf_skip) {
     for (int u = 0; u < static_cast<int>(cloud_msg->width); ++u, ++iter_x, ++iter_y, ++iter_z, ++iter_r, ++iter_g, ++iter_b, combined_ptr += combined_pixel_step, ++iter_label, conf_ptr += conf_pixel_step) {
       T depth = depth_row[u];
@@ -455,7 +456,11 @@ void convertDepthwithCombinedmsg(
         throw std::runtime_error("Unsupported confidence image encoding");
       }
       // std::cout<<"conf value: "<<static_cast<int>(conf_value)<<std::endl;
-      if (conf_value > 30) {  // threshold can be parameterized
+      // conf 200 for task3   conf20 for task1 and task2
+      // if (conf_value > max_conf) {
+      //   max_conf = conf_value;
+      // }
+      if (conf_value > 20) {  // threshold can be parameterized
         count++;
         *iter_x = bad_point;
         *iter_y = bad_point;
@@ -467,6 +472,7 @@ void convertDepthwithCombinedmsg(
 
     }
   }
+  // std::cout<<"max conf value in frame: "<<max_conf<<std::endl;
 
 
   }
