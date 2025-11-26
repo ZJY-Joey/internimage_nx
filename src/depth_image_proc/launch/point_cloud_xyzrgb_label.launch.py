@@ -140,6 +140,24 @@ def generate_launch_description():
                                 ('output', '/internimage/segmentation/filtered/points')]
                 ),
 
+                # ground points filter for octomap  
+                launch_ros.descriptions.ComposableNode(
+                    package='pcl_ros',
+                    plugin='pcl_ros::PassThrough',
+                    name='ground_passthrough_filter_node',
+                    parameters=[{
+                        'use_sim_time': use_sim_time,
+                        'input_frame': 'aliengo',
+                        'output_frame': 'aliengo',  
+                        'filter_field_name': 'x',
+                        'filter_limit_min': 0.0,
+                        'filter_limit_max': 4.0,
+                    }],
+                    remappings=[('input', '/internimage/segmentation/ground_points'),
+                                ('output', '/internimage/segmentation/ground_points/filtered')]
+                ),
+
+
 
 
                 launch_ros.descriptions.ComposableNode(
@@ -150,14 +168,14 @@ def generate_launch_description():
                         'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
                         'output_frame': 'world',  
-                        'leaf_size': 0.4,
+                        'leaf_size': 0.5,
                         'filter_field_name': 'z',
                         'filter_limit_min': -1000.0,
                         'filter_limit_max': 1000.0,
                         # 'min_points_per_voxel': 100,
                     }],
-                    remappings=[('input', '/internimage/segmentation/ground_points'),
-                                ('output', '/internimage/segmentation/ground_points/voxel')]
+                    remappings=[('input', '/internimage/segmentation/ground_points/filtered'),
+                                ('output', '/internimage/segmentation/ground_points/filtered/voxel')]
                 ),
             ],
             output='screen',

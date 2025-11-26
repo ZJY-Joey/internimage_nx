@@ -141,8 +141,8 @@ void PointCloudXyzrgbLabelNode::imageCb(
   const Image::ConstSharedPtr & conf_msg_in,
   const CameraInfo::ConstSharedPtr & info_msg)
 {
-    RCLCPP_INFO(
-      get_logger(), "PointCloudXyzrgbLabelNode::imageCb called");
+    // RCLCPP_INFO(
+    //   get_logger(), "PointCloudXyzrgbLabelNode::imageCb called");
   //check for bad inputs of confidence image
   if (depth_msg->header.frame_id != conf_msg_in->header.frame_id) {
     RCLCPP_WARN_THROTTLE(
