@@ -159,7 +159,9 @@ void PointCloudXyzrgbLabelNode::connectCb()
 
 
 void PointCloudXyzrgbLabelNode::pointcloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg){
-   //transform pointcloud to depth frame if needed  (zed_left_camera_optical_frame)
+  // Always cache a usable LiDAR cloud in target_frame_ if possible; otherwise fallback to original
+  // std::cout<<"pointcloud_callback called"<<std::endl;
+
   if (msg->header.frame_id != target_frame_) {
     try {
       geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
@@ -170,14 +172,20 @@ void PointCloudXyzrgbLabelNode::pointcloud_callback(const sensor_msgs::msg::Poin
       sensor_msgs::msg::PointCloud2 transformed;
       tf2::doTransform(*msg, transformed, t);
       transformed.header.frame_id = target_frame_;
-      latest_transformed_pointcloud_msg = std::make_shared<sensor_msgs::msg::PointCloud2>(transformed);
+      latest_transformed_pointcloud_ = std::make_shared<sensor_msgs::msg::PointCloud2>(std::move(transformed));
       RCLCPP_DEBUG(this->get_logger(), "Transformed pointcloud from %s to %s",
-        msg->header.frame_id.c_str(), target_frame_);
+                   msg->header.frame_id.c_str(), target_frame_.c_str());
     } catch (const std::exception & e) {
-      RCLCPP_INFO(this->get_logger(), "TF lookup/transform failed: %s", e.what());
-      // fall back to original
+      RCLCPP_WARN(this->get_logger(),
+                  "TF lookup/transform failed: %s. Dropping this LiDAR cloud (frame: %s); waiting for transform to %s",
+                  e.what(), msg->header.frame_id.c_str(), target_frame_.c_str());
+      // Do not update latest_transformed_pointcloud_ to avoid projecting from a non-optical frame
     }
+  } else {
+    // Already in target frame; keep as-is
+    latest_transformed_pointcloud_ = msg;
   }
+  // latest_transformed_pointcloud_msg = msg;
 }
 
 void PointCloudXyzrgbLabelNode::imageCb(
@@ -308,13 +316,23 @@ void PointCloudXyzrgbLabelNode::imageCb(
       // accept combined msg in case color msg and id msg are not well aligned
       // convertDepthwithCombinedmsg<float>(depth_msg, cloud_msg, combined_msg, conf_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
       // convertDepthwithCombinedmsg<float>(depth_msg, ground_cloud_msg, combined_msg, conf_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
-      convertLabelAndRgbWithLidar<float>(cloud_msg, combined_msg, latest_transformed_pointcloud_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset);
-      convertLabelAndRgbWithLidar<float>(ground_cloud_msg, combined_msg, latest_transformed_pointcloud_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset);
-    } else {
+      if(latest_transformed_pointcloud_ == nullptr){
+        RCLCPP_ERROR(
+        get_logger(), "No LiDAR pointcloud received yet, cannot proceed.");
+        return;
+      }
+      if(latest_transformed_pointcloud_->header.stamp != last_processed_lidar_cloud_stamp_){
+        PointCloud2::ConstSharedPtr pointcloud_ptr = latest_transformed_pointcloud_;
+        convertLabelAndRgbWithLidar<float>(cloud_msg, combined_msg, pointcloud_ptr, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset);
+        convertLabelAndRgbWithLidar<float>(ground_cloud_msg, combined_msg, pointcloud_ptr, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset);
+        last_processed_lidar_cloud_stamp_ = pointcloud_ptr->header.stamp;
+      }
+    }else {
       RCLCPP_ERROR(
         get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
       return;
     }
+  
   }else{
     throw std::runtime_error("No filter labels specified, full pointcloud generation not implemented yet.");
     return;

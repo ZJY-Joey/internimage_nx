@@ -35,6 +35,8 @@
 
 #include <limits>
 #include <unordered_set>
+#include <vector>
+#include <cmath>
 
 #include "image_geometry/pinhole_camera_model.hpp"
 
@@ -187,157 +189,6 @@ void convertDepthwithLabel(
 
 
 
-
-// Handles float or uint16 depths
-template<typename T>
-void convertDepthwithLabelAndConfidence(
-  const sensor_msgs::msg::Image::ConstSharedPtr & depth_msg,
-  sensor_msgs::msg::PointCloud2::SharedPtr & cloud_msg,
-  const sensor_msgs::msg::Image::ConstSharedPtr & id_msg,
-  const sensor_msgs::msg::Image::ConstSharedPtr & conf_msg,
-  std::unordered_set<unsigned char> filter_labels,
-  bool filter_keep,
-  const image_geometry::PinholeCameraModel & model,
-  double range_max = 0.0)
-{
-  // Use correct principal point from calibration
-  float center_x = model.cx();
-  float center_y = model.cy();
-
-  // Combine unit conversion (if necessary) with scaling by focal length for computing (X,Y)
-  double unit_scaling = DepthTraits<T>::toMeters(T(1) );
-  float constant_x = unit_scaling / model.fx();
-  float constant_y = unit_scaling / model.fy();
-  float bad_point = std::numeric_limits<float>::quiet_NaN();
-
-  sensor_msgs::PointCloud2Iterator<float> iter_x(*cloud_msg, "x");
-  sensor_msgs::PointCloud2Iterator<float> iter_y(*cloud_msg, "y");
-  sensor_msgs::PointCloud2Iterator<float> iter_z(*cloud_msg, "z");  
-  sensor_msgs::PointCloud2Iterator<uint8_t> iter_label(*cloud_msg, "label");
-  const uint8_t * id_ptr = &id_msg->data[0];
-
-  // Best-effort bytes-per-pixel for id image (supports 8U/16U/32S typical encodings)
-  int id_pixel_step = static_cast<int>(id_msg->step / id_msg->width);
-  if (id_pixel_step <= 0) {
-    id_pixel_step = 1;  // fallback for safety
-  }
-  int id_skip = static_cast<int>(id_msg->step - id_msg->width * id_pixel_step);
-
-  const uint8_t * conf_ptr = &conf_msg->data[0];
-
-  // Best-effort bytes-per-pixel for id image (supports 8U/16U/32S typical encodings)
-  int conf_pixel_step = static_cast<int>(conf_msg->step / conf_msg->width);
-  if (conf_pixel_step <= 0) {
-    conf_pixel_step = 1;  // fallback for safety
-  }
-  int conf_skip = static_cast<int>(conf_msg->step - conf_msg->width * conf_pixel_step);
-
-  const T * depth_row = reinterpret_cast<const T *>(&depth_msg->data[0]);
-  int row_step = depth_msg->step / sizeof(T);
-  int count = 0;
-  // Collect unique labels seen in this frame so we can write them once per frame
-  std::unordered_set<int> seen_labels;
-  for (int v = 0; v < static_cast<int>(cloud_msg->height); ++v, depth_row += row_step, id_ptr += id_skip, conf_ptr += conf_skip) {
-    for (int u = 0; u < static_cast<int>(cloud_msg->width); ++u, ++iter_x, ++iter_y, ++iter_z, id_ptr += id_pixel_step, ++iter_label, conf_ptr += conf_pixel_step) {
-      T depth = depth_row[u];
-
-      // Missing points denoted by NaNs
-      if (!DepthTraits<T>::valid(depth)) {
-        if (range_max != 0.0) {
-          depth = DepthTraits<T>::fromMeters(range_max);
-        } else {
-          *iter_x = *iter_y = *iter_z = bad_point;
-          continue;
-        }
-      }
-
-      // Fill in XYZ
-      *iter_x = (u - center_x) * depth * constant_x;
-      *iter_y = (v - center_y) * depth * constant_y;
-      *iter_z = DepthTraits<T>::toMeters(depth);
-      
-      // Semantic label
-      uint8_t label_value = 0;
-      if (id_pixel_step == 1) {  //here
-        label_value = id_ptr[0];
-      } else if (id_pixel_step == 2) {
-        uint16_t v16 = 0;
-        std::memcpy(&v16, id_ptr, sizeof(uint16_t));
-        label_value = static_cast<uint8_t>(v16);
-      } else if (id_pixel_step == 4) {
-        // Covers 32-bit integer labels; truncate to 8-bit as classes < 155
-        uint32_t v32 = 0;
-        std::memcpy(&v32, id_ptr, sizeof(uint32_t));
-        label_value = static_cast<uint8_t>(v32);
-      } else {
-        throw std::runtime_error("Unsupported label image encoding");
-      }
-      *iter_label = label_value;
-      // Track the label for a per-frame summary
-      seen_labels.insert(static_cast<int>(label_value));
-      const bool in_set = (filter_labels.find(label_value) != filter_labels.end());
-      const bool should_mask = filter_keep ? !in_set : in_set;
-      if (should_mask) {
-        *iter_x = bad_point;
-        *iter_y = bad_point;
-        *iter_z = bad_point;
-      }
-
-      // Confidence value filter
-      float conf_value = 0;
-      if (conf_pixel_step == 1) {
-        conf_value = conf_ptr[0];
-      } else if (conf_pixel_step == 2) {
-        uint16_t v16 = 0;
-        std::memcpy(&v16, conf_ptr, sizeof(uint16_t));
-        conf_value = static_cast<float>(v16);
-      } else if (conf_pixel_step == 4) {
-        // Covers 32-bit integer labels; truncate to 8-bit as classes < 155
-        float v32 = 0;
-        std::memcpy(&v32, conf_ptr, sizeof(float));
-        conf_value = static_cast<float>(v32);
-      } else {
-        throw std::runtime_error("Unsupported confidence image encoding");
-      }
-      // std::cout<<"conf value: "<<static_cast<int>(conf_value)<<std::endl;
-      if (conf_value > 30) {  // threshold can be parameterized
-        count++;
-        *iter_x = bad_point;
-        *iter_y = bad_point;
-        *iter_z = bad_point;
-      }
-
-      
-      
-
-    }
-  }
-  // complie if in need
-  // char filename[ ] = "label_value.txt";
-  // std::fstream myFile(filename, std::fstream::out | std::fstream::app);
-  // // After processing the whole frame, write a single summary line listing unique labels
-  // if (myFile.is_open() || true) {
-  //   // Re-open for append if it was closed above (some platforms may have closed it earlier)
-  //   if (!myFile.is_open()) myFile.open(filename, std::fstream::out | std::fstream::app);
-  //   if (myFile.is_open()) {
-  //     // Use depth_msg timestamp if available
-  //     uint32_t sec = depth_msg->header.stamp.sec;
-  //     uint32_t nsec = depth_msg->header.stamp.nanosec;
-  //     myFile << sec << '.' << nsec << ' ';
-  //     bool first = true;
-  //     for (int lbl : seen_labels) {
-  //       if (!first) myFile << ',';
-  //       first = false;
-  //       const bool in_set = (filter_labels.find(static_cast<unsigned char>(lbl)) != filter_labels.end());
-  //       myFile << lbl << ':' << (in_set ? "in" : "out");
-  //     }
-  //     myFile << '\n';
-  //     myFile.close();
-  //   }
-  // }
-  // std::cout<<"conf filter count: "<<count<<std::endl;
-}
-
 template<typename T>
 void convertDepthwithCombinedmsg(
   const sensor_msgs::msg::Image::ConstSharedPtr & depth_msg,
@@ -473,9 +324,156 @@ void convertDepthwithCombinedmsg(
     }
   }
   // std::cout<<"max conf value in frame: "<<max_conf<<std::endl;
-
+  // complie if in need
+    // char filename[ ] = "label_value.txt";
+    // std::fstream myFile(filename, std::fstream::out | std::fstream::app);
+    // // After processing the whole frame, write a single summary line listing unique labels
+    // if (myFile.is_open() || true) {
+    //   // Re-open for append if it was closed above (some platforms may have closed it earlier)
+    //   if (!myFile.is_open()) myFile.open(filename, std::fstream::out | std::fstream::app);
+    //   if (myFile.is_open()) {
+    //     // Use depth_msg timestamp if available
+    //     uint32_t sec = depth_msg->header.stamp.sec;
+    //     uint32_t nsec = depth_msg->header.stamp.nanosec;
+    //     myFile << sec << '.' << nsec << ' ';
+    //     bool first = true;
+    //     for (int lbl : seen_labels) {
+    //       if (!first) myFile << ',';
+    //       first = false;
+    //       const bool in_set = (filter_labels.find(static_cast<unsigned char>(lbl)) != filter_labels.end());
+    //       myFile << lbl << ':' << (in_set ? "in" : "out");
+    //     }
+    //     myFile << '\n';
+    //     myFile.close();
+    //   }
+    // }
+    // std::cout<<"conf filter count: "<<count<<std::endl;
 
   }
+
+
+
+
+template<typename T>
+void convertLabelAndRgbWithLidar(
+  sensor_msgs::msg::PointCloud2::SharedPtr & cloud_msg,
+  const sensor_msgs::msg::Image::ConstSharedPtr & combined_msg,
+  const sensor_msgs::msg::PointCloud2::ConstSharedPtr & lidar_msg,
+  std::unordered_set<unsigned char> filter_labels,
+  bool filter_keep,
+  const image_geometry::PinholeCameraModel & model,
+  int red_offset, int green_offset, int blue_offset)
+{
+  std::cout<<"call convertLabelAndRgbWithLidar"<<std::endl;
+  // If no LiDAR, output empty cloud
+  if (!lidar_msg) {
+    cloud_msg->data.clear();
+    cloud_msg->width = 0;
+    cloud_msg->height = 1;
+    cloud_msg->row_step = 0;
+    cloud_msg->is_dense = false;
+    std::cout << "cloud_msg points: 0" << std::endl;
+    return;
+  }
+
+
+  const int img_w = static_cast<int>(combined_msg->width);
+  const int img_h = static_cast<int>(combined_msg->height);
+  const int combined_pixel_step = static_cast<int>(combined_msg->step / combined_msg->width);
+  if (combined_pixel_step != 4) {
+    throw std::runtime_error("convertLabelAndRgbWithLidar expects RGBA8 (4 bytes per pixel) for combined_msg");
+  }
+
+
+  const size_t point_step = cloud_msg->point_step;
+  int offset_x = -1, offset_y = -1, offset_z = -1, offset_rgb = -1, offset_label = -1;
+  for (const auto & f : cloud_msg->fields) {
+    if (f.name == "x") offset_x = f.offset;
+    else if (f.name == "y") offset_y = f.offset;
+    else if (f.name == "z") offset_z = f.offset;
+    else if (f.name == "rgb") offset_rgb = f.offset;
+    else if (f.name == "label") offset_label = f.offset;
+  }
+  if (offset_x < 0 || offset_y < 0 || offset_z < 0 || offset_rgb < 0 || offset_label < 0) {
+    throw std::runtime_error("PointCloud2 missing required fields (x,y,z,rgb,label)");
+  }
+
+  cloud_msg->data.clear();
+  cloud_msg->data.shrink_to_fit();  
+  cloud_msg->is_dense = false;    
+
+  sensor_msgs::PointCloud2ConstIterator<float> in_x(*lidar_msg, "x");
+  sensor_msgs::PointCloud2ConstIterator<float> in_y(*lidar_msg, "y");
+  sensor_msgs::PointCloud2ConstIterator<float> in_z(*lidar_msg, "z");
+
+  size_t written = 0;
+
+  // Prepare a reusable buffer for one point record
+  std::vector<uint8_t> one_point(point_step, 0);
+
+  for (; in_x != in_x.end(); ++in_x, ++in_y, ++in_z) {
+    const float X = *in_x;
+    const float Y = *in_y;
+    const float Z = *in_z;
+
+    // Skip invalid or behind camera
+    if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || Z <= 0.f) {
+      continue;
+    }
+
+    // Project LiDAR point to image
+    const cv::Point2d uv = model.project3dToPixel(cv::Point3d(X, Y, Z));
+    const int u = static_cast<int>(uv.x);
+    const int v = static_cast<int>(uv.y);
+    
+    if (u < 0 || u >= img_w || v < 0 || v >= img_h) {
+      continue; // discard if outside combined_msg bounds (no semantic label)
+    }
+
+    const int base = v * static_cast<int>(combined_msg->step) + u * combined_pixel_step;
+    const uint8_t * px = &combined_msg->data[base];
+
+    const uint8_t label = px[3];
+
+    // Label filtering
+    const bool in_set = (filter_labels.find(label) != filter_labels.end());
+    const bool should_mask = filter_keep ? !in_set : in_set;
+    if (should_mask) {
+      continue; // discard
+    }
+
+    // Pack XYZ
+    std::fill(one_point.begin(), one_point.end(), 0);
+    std::memcpy(one_point.data() + offset_x, &X, sizeof(float));
+    std::memcpy(one_point.data() + offset_y, &Y, sizeof(float));
+    std::memcpy(one_point.data() + offset_z, &Z, sizeof(float));
+
+    // Pack RGB from first three channels using provided offsets
+    const uint8_t r = px[red_offset];
+    const uint8_t g = px[green_offset];
+    const uint8_t b = px[blue_offset];
+    const uint32_t rgb = (static_cast<uint32_t>(r) << 16) |
+                         (static_cast<uint32_t>(g) << 8)  |
+                          static_cast<uint32_t>(b);
+    std::memcpy(one_point.data() + offset_rgb, &rgb, sizeof(uint32_t));
+
+    // Pack label
+    std::memcpy(one_point.data() + offset_label, &label, sizeof(uint8_t));
+
+    // Append to cloud buffer
+    cloud_msg->data.insert(cloud_msg->data.end(), one_point.begin(), one_point.end());
+    ++written;
+  }
+
+  // Finalize cloud shape
+  cloud_msg->width = static_cast<uint32_t>(written);
+  cloud_msg->height = 1;
+  cloud_msg->row_step = static_cast<uint32_t>(point_step * written);
+  cloud_msg->header.stamp = lidar_msg->header.stamp;
+
+  // Output the number of points
+  std::cout << "cloud_msg points: " << written << std::endl;
+}
 
 // Handles float or uint16 depths
 template<typename T>

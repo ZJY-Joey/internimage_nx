@@ -89,7 +89,8 @@ private:
   rclcpp::Publisher<PointCloud2>::SharedPtr pub_ground_point_cloud_;
 
   image_geometry::PinholeCameraModel model_;
-  PointCloud2::ConstSharedPtr latest_transformed_pointcloud_msg;
+  sensor_msgs::msg::PointCloud2::SharedPtr latest_transformed_pointcloud_;
+  rclcpp::Time last_processed_lidar_cloud_stamp_;
 
   void connectCb();
 
