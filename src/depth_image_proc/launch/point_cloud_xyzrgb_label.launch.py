@@ -116,11 +116,11 @@ def generate_launch_description():
                         'input_frame': 'aliengo',
                         'output_frame': 'aliengo',  
                         'filter_field_name': 'z',
-                        'filter_limit_min': -1.0,
-                        'filter_limit_max': 0.5,
+                        'filter_limit_min': -0.5,
+                        'filter_limit_max': 4.0,
                     }],
-                    remappings=[('input', '/internimage/segmentation/voxel/points'),
-                                ('output', '/internimage/segmentation/voxel/filtered/points')]
+                    remappings=[('input', '/internimage/segmentation/projected/points'),
+                                ('output', '/internimage/segmentation/filtered/points')]
                 ),
 
                 # for octomap
@@ -169,7 +169,7 @@ def generate_launch_description():
                         'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
                         'output_frame': 'world',  
-                        'leaf_size': 0.4,
+                        'leaf_size': 0.2,
                         'filter_field_name': 'z',
                         'filter_limit_min': -1000.0,
                         'filter_limit_max': 1000.0,

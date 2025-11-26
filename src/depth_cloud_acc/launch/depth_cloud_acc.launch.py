@@ -71,7 +71,7 @@ def generate_launch_description():
     ld = LaunchDescription([
         publish_period_arg,
         use_sim_time_arg,
-        container_pro_map,
+        # container_pro_map,
         depth_cloud_acc_node,
     ])
     return ld
