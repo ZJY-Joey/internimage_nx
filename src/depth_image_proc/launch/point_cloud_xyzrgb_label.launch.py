@@ -73,8 +73,8 @@ def generate_launch_description():
                     plugin='depth_image_proc::PointCloudXyzrgbLabelNode',
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
-                        'use_sim_time': use_sim_time, # moutain 3, 6, 9, 11, 30, 52, 53, 54, 58, 59, 95, 120  # yard 2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 95, 120
-                        'filter_labels': [2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 95, 120],   # 3, 6, 9, 11, 12, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路    # 15,19,30,33,64,97,110,111, 138
+                        'use_sim_time': use_sim_time, # moutain 3, 6, 9, 11, 30, 52, 53, 54, 58, 59, 95, 120  # yard 2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120
+                        'filter_labels': [2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120],   # 3, 6, 9, 11, 12, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路 
                         'filter_keep': False,   # drop specified labels
                     }],
                     remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
@@ -124,21 +124,21 @@ def generate_launch_description():
                 ),
 
                 # for octomap
-                launch_ros.descriptions.ComposableNode(
-                    package='pcl_ros',
-                    plugin='pcl_ros::PassThrough',
-                    name='passthrough_filter_node',
-                    parameters=[{
-                        'use_sim_time': use_sim_time,
-                        'input_frame': 'aliengo',
-                        'output_frame': 'aliengo',  
-                        'filter_field_name': 'z',
-                        'filter_limit_min': -1.0,
-                        'filter_limit_max': 2.0,
-                    }],
-                    remappings=[('input', '/internimage/segmentation/projected/points'),
-                                ('output', '/internimage/segmentation/filtered/points')]
-                ),
+                # launch_ros.descriptions.ComposableNode(
+                #     package='pcl_ros',
+                #     plugin='pcl_ros::PassThrough',
+                #     name='passthrough_filter_node',
+                #     parameters=[{
+                #         'use_sim_time': use_sim_time,
+                #         'input_frame': 'aliengo',
+                #         'output_frame': 'aliengo',  
+                #         'filter_field_name': 'z',
+                #         'filter_limit_min': -1.0,
+                #         'filter_limit_max': 2.0,
+                #     }],
+                #     remappings=[('input', '/internimage/segmentation/projected/points'),
+                #                 ('output', '/internimage/segmentation/filtered/points')]
+                # ),
 
                 # ground points filter for octomap  
                 launch_ros.descriptions.ComposableNode(
@@ -151,7 +151,8 @@ def generate_launch_description():
                         'output_frame': 'aliengo',  
                         'filter_field_name': 'x',
                         'filter_limit_min': 0.0,
-                        'filter_limit_max': 4.0,
+                        # with too many ground points, octomap server will be too slow and do not actually update
+                        'filter_limit_max': 1.5,
                     }],
                     remappings=[('input', '/internimage/segmentation/ground_points'),
                                 ('output', '/internimage/segmentation/ground_points/filtered')]
@@ -168,7 +169,7 @@ def generate_launch_description():
                         'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
                         'output_frame': 'world',  
-                        'leaf_size': 0.5,
+                        'leaf_size': 0.4,
                         'filter_field_name': 'z',
                         'filter_limit_min': -1000.0,
                         'filter_limit_max': 1000.0,
