@@ -13,7 +13,7 @@ import os
 def generate_launch_description():
     
     use_sim_time_arg = DeclareLaunchArgument(
-        'use_sim_time', default_value='True',
+        'use_sim_time', default_value='False',
         description='Use simulation time if available.'
     )
 
@@ -30,11 +30,11 @@ def generate_launch_description():
     )
 
     # cloud_registered cloud accmulation
-    depth_proc_launch_file_path = os.path.join(
+    cloud_registered_acc_launch_file_path = os.path.join(
         get_package_share_directory('depth_cloud_acc'), 'launch', 'cloud_registered_acc.launch.py'
     )
-    depth_proc_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(depth_proc_launch_file_path),
+    cloud_registered_acc_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(cloud_registered_acc_launch_file_path),
         launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
 
@@ -80,10 +80,11 @@ def generate_launch_description():
     ld = LaunchDescription([
         use_sim_time_arg,
         internimage_node,
-        # depth_proc_node,
+        cloud_registered_acc_node,
+        depth_proc_node,
         depth_cloud_acc_node,
         depth_cloud_octomap_node,
-        # octomap_update_node,
+        octomap_update_node,
     ])
     return ld
         
