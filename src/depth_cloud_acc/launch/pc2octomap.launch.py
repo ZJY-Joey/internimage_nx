@@ -26,6 +26,8 @@ def generate_launch_description():
             'resolution': 0.05,
             'sensor_model/max_range': 5.0,
             # 'filter_ground': True,
+            # 'ground_filter/distance':0.2,
+            # 'ground_filter/plane_distance' : -0.6,
 
         }], 
         remappings=[('cloud_in', '/internimage/segmentation/voxel/filtered/points')],
