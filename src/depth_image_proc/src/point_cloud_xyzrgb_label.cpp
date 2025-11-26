@@ -15,6 +15,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 
+
+
 namespace depth_image_proc
 {
 
@@ -23,8 +25,16 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
 : rclcpp::Node("PointCloudXyzrgbLabelNode", options)
 {
   // Read parameters
-  int queue_size = this->declare_parameter<int>("queue_size", 150);
+  int queue_size = this->declare_parameter<int>("queue_size", 20);
   bool use_exact_sync = this->declare_parameter<bool>("exact_sync", true);
+  // Slop (max interval duration) for ApproximateTime sync in seconds
+  double approx_sync_slop = this->declare_parameter<double>("approx_sync_slop", 0.5);
+
+  std::string target_frame = this->declare_parameter<std::string>("target_frame", "zed_left_camera_optical_frame");
+
+  // Target frame for transforming incoming lidar pointcloud
+  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   // Label filtering parameters
   // filter_labels: list of integer labels. By default, points with these labels will be dropped (masked as NaN).
@@ -33,6 +43,8 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
   filter_labels_param = this->get_parameter("filter_labels").as_integer_array();
   filter_keep_ = this->declare_parameter<bool>("filter_keep", false);
   filter_keep_ = this->get_parameter("filter_keep").as_bool();
+  target_frame_ = this->get_parameter("target_frame").as_string();
+
   filter_labels_.clear();
   for (const auto & v : filter_labels_param) {
     if (v >= 0 && v <= 255) {
@@ -48,8 +60,6 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
     exact_sync_ = std::make_shared<ExactSynchronizer>(
       ExactSyncPolicy(queue_size),
       sub_depth_,
-      // sub_rgb_,
-      // sub_id_,
       sub_combined_,
       sub_conf_,
       sub_info_);
@@ -64,6 +74,8 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
       ));
   } else {
     sync_ = std::make_shared<Synchronizer>(SyncPolicy(queue_size), sub_depth_, sub_combined_, sub_conf_, sub_info_); //sub_rgb_, sub_id_,
+    // Configure slop window for ApproximateTime policy
+    sync_->setMaxIntervalDuration(rclcpp::Duration::from_seconds(approx_sync_slop));
     sync_->registerCallback(
       std::bind(
         &PointCloudXyzrgbLabelNode::imageCb,
@@ -82,13 +94,15 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
   pub_point_cloud_ = create_publisher<PointCloud2>("points", rclcpp::SensorDataQoS());
   pub_ground_point_cloud_ = create_publisher<PointCloud2>("ground_points", rclcpp::SensorDataQoS());
 
+
+
 }
 
 // Handles (un)subscribing when clients (un)subscribe
 void PointCloudXyzrgbLabelNode::connectCb()
 {
-  // RCLCPP_INFO(
-  //   get_logger(), "PointCloudXyzrgbLabelNode::connectCb called");
+  RCLCPP_INFO(
+    get_logger(), "PointCloudXyzrgbLabelNode::connectCb called");
   std::lock_guard<std::mutex> lock(connect_mutex_);
   // TODO(ros2) Implement getNumSubscribers when rcl/rmw support it
   // if (pub_point_cloud_->getNumSubscribers() == 0)
@@ -126,12 +140,43 @@ void PointCloudXyzrgbLabelNode::connectCb()
         this, "combined/image_rect_combined",
         combined_hints.getTransport(), rmw_qos_profile_default, sub_opts);
 
+
     //confidence uses confidence ros transport hints.
     image_transport::TransportHints conf_hints(this, "raw");
     sub_conf_.subscribe(
         this, "confidence/image_rect_confidence",
         conf_hints.getTransport(), rmw_qos_profile_default, sub_opts);
 
+    // Subscribe to lidar pointcloud using message_filters subscriber (not image_transport)
+    sub_pointcloud_ = create_subscription<sensor_msgs::msg::PointCloud2>(
+      "lidar/points",
+      rclcpp::SensorDataQoS(),
+      std::bind(&PointCloudXyzrgbLabelNode::pointcloud_callback, this, std::placeholders::_1),
+      sub_opts);
+
+  }
+}
+
+
+void PointCloudXyzrgbLabelNode::pointcloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg){
+   //transform pointcloud to depth frame if needed  (zed_left_camera_optical_frame)
+  if (msg->header.frame_id != target_frame_) {
+    try {
+      geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
+        target_frame_,
+        msg->header.frame_id,
+        rclcpp::Time(msg->header.stamp),
+        rclcpp::Duration::from_seconds(0.2));
+      sensor_msgs::msg::PointCloud2 transformed;
+      tf2::doTransform(*msg, transformed, t);
+      transformed.header.frame_id = target_frame_;
+      latest_transformed_pointcloud_msg = std::make_shared<sensor_msgs::msg::PointCloud2>(transformed);
+      RCLCPP_DEBUG(this->get_logger(), "Transformed pointcloud from %s to %s",
+        msg->header.frame_id.c_str(), target_frame_);
+    } catch (const std::exception & e) {
+      RCLCPP_INFO(this->get_logger(), "TF lookup/transform failed: %s", e.what());
+      // fall back to original
+    }
   }
 }
 
@@ -141,8 +186,10 @@ void PointCloudXyzrgbLabelNode::imageCb(
   const Image::ConstSharedPtr & conf_msg_in,
   const CameraInfo::ConstSharedPtr & info_msg)
 {
-    // RCLCPP_INFO(
-    //   get_logger(), "PointCloudXyzrgbLabelNode::imageCb called");
+  // RCLCPP_INFO(
+  //   get_logger(), "PointCloudXyzrgbLabelNode::imageCb called");
+    
+ 
   //check for bad inputs of confidence image
   if (depth_msg->header.frame_id != conf_msg_in->header.frame_id) {
     RCLCPP_WARN_THROTTLE(
@@ -232,8 +279,6 @@ void PointCloudXyzrgbLabelNode::imageCb(
   "z", 1, sensor_msgs::msg::PointField::FLOAT32,
   "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
   "label", 1, sensor_msgs::msg::PointField::UINT8);
-  pcd_modifier.resize(static_cast<uint32_t>(cloud_msg->width) * static_cast<uint32_t>(cloud_msg->height));
-
 
   auto ground_cloud_msg = std::make_shared<PointCloud2>();
   ground_cloud_msg->header = depth_msg->header;  // Use depth image time stamp
@@ -249,20 +294,22 @@ void PointCloudXyzrgbLabelNode::imageCb(
   "z", 1, sensor_msgs::msg::PointField::FLOAT32,
   "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
   "label", 1, sensor_msgs::msg::PointField::UINT8);
-  ground_pcd_modifier.resize(static_cast<uint32_t>(ground_cloud_msg->width) * static_cast<uint32_t>(ground_cloud_msg->height));
+  
 
 
   if (!filter_labels_.empty()) {
     // convert depth image to pointcloud with condition filter of label
     if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
-      std::cout<<"convertDepthwithLabelAndConfidence - uint16_t"<<std::endl;
-      // publish ground cloud for octomap update in case missegmentation of internimage 
-      convertDepthwithCombinedmsg<uint16_t>(depth_msg, cloud_msg, combined_msg, conf_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
-      convertDepthwithCombinedmsg<uint16_t>(depth_msg, cloud_msg, combined_msg, conf_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
+      throw std::runtime_error("depth msg encoding TYPE_16UC1 not supported.");
+      // std::cout<<"convertDepthwithLabelAndConfidence - uint16_t"<<std::endl;
+      // convertDepthwithCombinedmsg<uint16_t>(depth_msg, cloud_msg, combined_msg, conf_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
+      // convertDepthwithCombinedmsg<uint16_t>(depth_msg, ground_cloud_msg, combined_msg, conf_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
     } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
       // accept combined msg in case color msg and id msg are not well aligned
-      convertDepthwithCombinedmsg<float>(depth_msg, cloud_msg, combined_msg, conf_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
-      convertDepthwithCombinedmsg<float>(depth_msg, ground_cloud_msg, combined_msg, conf_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
+      // convertDepthwithCombinedmsg<float>(depth_msg, cloud_msg, combined_msg, conf_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
+      // convertDepthwithCombinedmsg<float>(depth_msg, ground_cloud_msg, combined_msg, conf_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset, color_step);
+      convertLabelAndRgbWithLidar<float>(cloud_msg, combined_msg, latest_transformed_pointcloud_msg, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset);
+      convertLabelAndRgbWithLidar<float>(ground_cloud_msg, combined_msg, latest_transformed_pointcloud_msg, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset);
     } else {
       RCLCPP_ERROR(
         get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());

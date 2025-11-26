@@ -29,6 +29,16 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': use_sim_time }.items()
     )
 
+    # cloud_registered cloud accmulation
+    depth_proc_launch_file_path = os.path.join(
+        get_package_share_directory('depth_cloud_acc'), 'launch', 'cloud_registered_acc.launch.py'
+    )
+    depth_proc_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(depth_proc_launch_file_path),
+        launch_arguments={'use_sim_time': use_sim_time }.items(),
+    )
+
+
     # depth image proc to pointcloud xyzrgb label   
     depth_proc_launch_file_path = os.path.join(
         get_package_share_directory('depth_image_proc'), 'launch', 'point_cloud_xyzrgb_label.launch.py'
@@ -50,7 +60,7 @@ def generate_launch_description():
 
     # depth cloud acc to octomap
     depth_cloud_octomap_launch_file_path = os.path.join(
-        get_package_share_directory('depth_cloud_acc'), 'launch', 'pc2octomap.launch.py'
+        get_package_share_directory('atec_internimage'), 'launch', 'pc2octomap.launch.py'
     )
     depth_cloud_octomap_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(depth_cloud_octomap_launch_file_path),
@@ -70,10 +80,10 @@ def generate_launch_description():
     ld = LaunchDescription([
         use_sim_time_arg,
         internimage_node,
-        depth_proc_node,
+        # depth_proc_node,
         depth_cloud_acc_node,
         depth_cloud_octomap_node,
-        octomap_update_node,
+        # octomap_update_node,
     ])
     return ld
         
