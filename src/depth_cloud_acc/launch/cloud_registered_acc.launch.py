@@ -40,7 +40,7 @@ def generate_launch_description():
                         'filter_limit_max': 100.0,
                     }],
                     remappings=[('input', '/cloud_registered/acc'),
-                                ('output', '/cloud_registered/acc/temp_filtered')]
+                                ('output', '/cloud_registered/acc/filtered')]
                 ),
 
                 # launch_ros.descriptions.ComposableNode(
