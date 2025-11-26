@@ -33,6 +33,8 @@ public:
     this->declare_parameter<int>("rebuild_keep_last_clouds", 50); // when rebuilding, number of recent clouds to retain
     this->declare_parameter<std::string>("aggregation_strategy", "rebuild"); // or 'truncate'
     this->declare_parameter<int>("log_every_n", 20);
+    this->declare_parameter<bool>("acc_cloud_registered", false);
+    this->declare_parameter<int>("max_aggregated_frames", 10);
 
     input_topic_ = this->get_parameter("input_depth_points_topic").as_string();
     output_topic_ = this->get_parameter("output_depth_points_topic").as_string();
@@ -43,8 +45,9 @@ public:
     lookup_timeout_ = this->get_parameter("lookup_timeout").as_double();
     max_aggregated_points_ = this->get_parameter("max_aggregated_points").as_int();
     rebuild_keep_last_clouds_ = this->get_parameter("rebuild_keep_last_clouds").as_int();
-    aggregation_strategy_ = this->get_parameter("aggregation_strategy").as_string();
     log_every_n_ = this->get_parameter("log_every_n").as_int();
+    acc_cloud_registered_ = this->get_parameter("acc_cloud_registered").as_bool();
+    max_aggregated_frames_ = this->get_parameter("max_aggregated_frames").as_int();
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     // construct TransformListener with node pointer
@@ -69,8 +72,8 @@ public:
     reset_srv_ = this->create_service<std_srvs::srv::Empty>("/reset_map",
       std::bind(&DepthCloudAccNode::handle_reset, this, std::placeholders::_1, std::placeholders::_2));
 
-    RCLCPP_INFO(this->get_logger(), "DepthCloudAccNode started: sub='%s' pub='%s' frame='%s' period=%.3f strategy=%s max_agg=%d",
-      input_topic_.c_str(), output_topic_.c_str(), fixed_frame_.c_str(), publish_period_, aggregation_strategy_.c_str(), max_aggregated_points_);
+    RCLCPP_INFO(this->get_logger(), "DepthCloudAccNode started: sub='%s' pub='%s' frame='%s' period=%.3f max_agg=%d",
+      input_topic_.c_str(), output_topic_.c_str(), fixed_frame_.c_str(), publish_period_, max_aggregated_points_);
   }
 
 private:
@@ -109,7 +112,7 @@ private:
     }
     append_to_aggregated(cloud);
     if (++received_count_ % std::max(1, log_every_n_) == 0) {
-      RCLCPP_INFO(this->get_logger(), "Received %d clouds | aggregated_points=%u", received_count_, aggregated_ ? aggregated_->width : 0);
+      // RCLCPP_INFO(this->get_logger(), "Received %d clouds | aggregated_points=%u", received_count_, aggregated_ ? aggregated_->width : 0);
     }
   }
 
@@ -136,6 +139,7 @@ private:
     aggregated_->width += cloud->width;
     aggregated_->row_step = aggregated_->width * aggregated_->point_step;
     aggregated_->header.frame_id = fixed_frame_;
+    ++aggregated_frames_;
     enforce_limits();
   }
 
@@ -158,22 +162,18 @@ private:
 
   void enforce_limits()
   {
-    if (!aggregated_ || max_aggregated_points_ <= 0) return;
-    if (static_cast<int>(aggregated_->width) <= max_aggregated_points_) return;
-
-    if (aggregation_strategy_ == "truncate") {
-      // Truncate newest excess points: shrink data vector to cap.
-      int point_step = aggregated_->point_step;
-      int excess = static_cast<int>(aggregated_->width) - max_aggregated_points_;
-      size_t bytes_excess = static_cast<size_t>(excess) * point_step;
-      if (bytes_excess < aggregated_->data.size()) {
-        aggregated_->data.resize(aggregated_->data.size() - bytes_excess);
-        aggregated_->width = max_aggregated_points_;
-        aggregated_->row_step = aggregated_->width * point_step;
-        RCLCPP_WARN(this->get_logger(), "Truncated aggregated cloud to %d points (strategy=truncate)", max_aggregated_points_);
-      }
+    // if not cloud_regitered, enforce limit with aggregated points
+    if(!acc_cloud_registered_ ) {
+        if (!aggregated_ || max_aggregated_points_ <= 0) return;
+        if (static_cast<int>(aggregated_->width) <= max_aggregated_points_) return;
       return;
     }
+    // if cloud_registered, enforce limit with aggregated frames;
+    else{
+      if(!aggregated_ || max_aggregated_points_ <= 0) return; 
+      if( aggregated_frames_ <= max_aggregated_frames_) return; 
+    }
+
 
     // Default: rebuild from tail of deque
     if (clouds_.empty()) return; // should not happen
@@ -196,10 +196,15 @@ private:
         rebuilt->row_step = rebuilt->width * rebuilt->point_step;
       }
       ++kept;
-      if (static_cast<int>(rebuilt->width) >= max_aggregated_points_) break; // reached cap
+      if(!acc_cloud_registered_){
+        if (static_cast<int>(rebuilt->width) >= max_aggregated_points_) break; // reached cap
+      }
+      else{
+        if(kept >= max_aggregated_frames_) break; // reached cap
+      }
     }
     aggregated_ = rebuilt;
-    RCLCPP_WARN(this->get_logger(), "Rebuilt aggregated cloud from last %d clouds -> %u points (cap=%d)", kept, aggregated_->width, max_aggregated_points_);
+    // RCLCPP_WARN(this->get_logger(), "Rebuilt aggregated cloud from last %d clouds -> %u points (cap=%d)", kept, aggregated_->width, max_aggregated_points_);
   }
 
   // parameters
@@ -215,6 +220,11 @@ private:
   std::string aggregation_strategy_;
   int log_every_n_;
   int received_count_{0};
+  bool acc_cloud_registered_;
+  int aggregated_frames_{0};
+  int max_aggregated_frames_;
+
+
 
   // tf
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

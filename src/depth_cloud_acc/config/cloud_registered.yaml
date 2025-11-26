@@ -1,0 +1,19 @@
+depth_cloud_acc:
+  ros__parameters:
+    # subscribe topics
+    input_depth_points_topic: "/cloud_registered"
+    output_depth_points_topic: "/cloud_registered/acc"
+    # accumulate fixed frame
+    fixed_frame: "camera_init"
+    publish_period: 0.01  # seconds
+    max_clouds: 10  # number of raw clouds retained
+    enable_transform: true
+    lookup_timeout: 0.2  # seconds
+    log_every_n: 100
+    max_aggregated_points: 5000
+    rebuild_keep_last_clouds: 10
+    aggregation_strategy: "rebuild"  # or 'rebuild = slide window'
+
+    # params for registered cloud accumulation
+    acc_cloud_registered: true
+    max_aggregated_frames: 10
