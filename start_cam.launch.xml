@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <include file="$(find-pkg-share realsense2_camera)/launch/rs_launch.py">
+        <arg name="camera_namespace" value="camera"/>
+        <arg name="camera_name" value="rs_d455"/>
+        <arg name="serial_no" value="'039323061417'"/>
+        <arg name="initial_reset" value="true"/>
+        <arg name="enable_color" value="true"/>
+        <arg name="enable_infra1" value="false"/>
+        <arg name="clip_distance" value="5"/>
+        <arg name="depth_module.infra_profile" value="'848,480,15'"/>
+        <arg name="depth_module.depth_profile" value="'848,480,15'"/>
+        <arg name="pointcloud.enable" value="true"/>
+        <arg name="pointcloud.stream_filter" value="0"/>
+        <arg name="pointcloud.allow_no_texture_points" value="true"/>
+        <arg name="publish_tf" value="true"/>
+        <arg name="reconnect_timeout" value="3.0"/>
+    </include>
+</launch>

@@ -11,13 +11,14 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <omp.h> 
+#include "octomap_extra_msgs/srv/list_bounding_box_query.hpp"
 
-// update octomap by registering a client to call the clear_bbox service
+// update octomap by registering a client to call the clear_bbox service  
 
 class OctomapUpdateNode : public rclcpp::Node
 {
 public:
-  using BBoxSrv = octomap_msgs::srv::BoundingBoxQuery;
+  using ListBBoxSrv = octomap_extra_msgs::srv::ListBoundingBoxQuery;
 
   OctomapUpdateNode()
   : Node("OctomapUpdateNode")
@@ -25,7 +26,6 @@ public:
     RCLCPP_INFO(this->get_logger(), "OctomapUpdateNode has been started.");
     this->declare_parameter<std::string>("input_topic", "/internimage/segmentation/ground_points/voxel");
     this->declare_parameter<std::string>("target_frame", "map");
-    this->declare_parameter<bool>("log_each_bbox", false);
 
 
     input_topic_ = this->get_parameter("input_topic").as_string();
@@ -37,10 +37,10 @@ public:
 
     cli_group_cb = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     // Use default Services QoS (reliable) instead of SensorDataQoS (best-effort) to ensure matching
-    service_client_ = this->create_client<BBoxSrv>("/octomap_server/clear_bbox", rclcpp::ServicesQoS(), cli_group_cb);
+    service_client_ = this->create_client<ListBBoxSrv>("/octomap_server/clear_list_bbox", rclcpp::ServicesQoS(), cli_group_cb);
 
     this->declare_parameter<float>("bbox_size", 0.10); 
-    bbox_size = this->get_parameter("bbox_size").as_double();
+    bbox_size_ = this->get_parameter("bbox_size").as_double();
     target_frame_ = this->get_parameter("target_frame").as_string();
 
     // TF Buffer & Listener (keep for lifetime of node)
@@ -52,7 +52,7 @@ public:
 
   private:
 
-  void handle_clear_bbox_response(rclcpp::Client<BBoxSrv>::SharedFuture future)
+  void handle_clear_bbox_response(rclcpp::Client<ListBBoxSrv>::SharedFuture future)
   {
     try {
       auto response = future.get();
@@ -63,23 +63,17 @@ public:
     }
   }
 
-  void call_clear_bbox_service(
-    double min_x, double min_y, double min_z,
-    double max_x, double max_y, double max_z)
+  void call_clear_bbox_service(const std::vector<geometry_msgs::msg::Point> &ground_points, float bbox_size)
   {
     if (!service_client_->service_is_ready()) {
       RCLCPP_WARN(this->get_logger(), "Service /octomap_server/clear_bbox not ready yet; skipping this bbox.");
       return;
     }
 
-    auto request = std::make_shared<BBoxSrv::Request>();
-    request->min.x = min_x;
-    request->min.y = min_y;
-    request->min.z = min_z;
+    auto request = std::make_shared<ListBBoxSrv::Request>();
+    request->center = ground_points;
+    request->bbox_size = bbox_size;
 
-    request->max.x = max_x;
-    request->max.y = max_y;
-    request->max.z = max_z;
 
     // RCLCPP_INFO(this->get_logger(), "Sending request to clear BBox from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)", min_x, min_y, min_z, max_x, max_y, max_z);
 
@@ -91,9 +85,6 @@ public:
 
 
   void update_octomap_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg){
-    float bbox_size_local = this->get_parameter("bbox_size").as_double();
-    target_frame_ = this->get_parameter("target_frame").as_string();
-    bool log_each = this->get_parameter("log_each_bbox").as_bool();
 
     const std::string source_frame = msg->header.frame_id;
     if (source_frame.empty()) {
@@ -128,7 +119,7 @@ public:
     sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
     sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
 
-    size_t sent = 0;
+    std::vector<geometry_msgs::msg::Point> ground_points;
     for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z){
       double t1  = omp_get_wtime();
       geometry_msgs::msg::PointStamped pt_src;
@@ -143,35 +134,26 @@ public:
       } catch (const tf2::TransformException & ex){
         continue; // skip this point
       }
-      double cx = pt_map.point.x;
-      double cy = pt_map.point.y;
-      double cz = pt_map.point.z;
-      double min_x = cx - bbox_size_local/2.0;
-      double min_y = cy - bbox_size_local/2.0;
-      double min_z = cz - bbox_size_local/2.0;
-      double max_x = cx + bbox_size_local/2.0;
-      double max_y = cy + bbox_size_local/2.0;
-      double max_z = cz + bbox_size_local/2.0;
-      if (log_each){
-        // RCLCPP_INFO(this->get_logger(), "Clear point bbox (%zu): (%.2f %.2f %.2f)->(%.2f %.2f %.2f) frame=%s", sent, min_x, min_y, min_z, max_x, max_y, max_z, target_frame_.c_str());
-      }
-      call_clear_bbox_service(min_x, min_y, min_z, max_x, max_y, max_z);
+      ground_points.push_back(pt_map.point);
+      
       double t2 = omp_get_wtime();
-      std::cout<<"t2 - t1 time to clear bbox: "<<t2 - t1<<std::endl;
       RCLCPP_INFO(this->get_logger(), "Time to clear bbox: %.6f seconds", t2 - t1);
-      ++sent;
-
     }
+    
+    call_clear_bbox_service(ground_points, this->bbox_size_);
+
+
   }
 
+  float bbox_size_;
   std::string input_topic_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_;
-  rclcpp::Client<BBoxSrv>::SharedPtr service_client_;
+  rclcpp::Client<ListBBoxSrv>::SharedPtr service_client_;
   rclcpp::CallbackGroup::SharedPtr cli_group_cb;
-  float bbox_size;
   std::string target_frame_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  
 
 };
 

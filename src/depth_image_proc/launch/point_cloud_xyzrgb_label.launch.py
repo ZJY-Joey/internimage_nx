@@ -76,11 +76,12 @@ def generate_launch_description():
                         'use_sim_time': use_sim_time, # moutain 3, 6, 9, 11, 30, 52, 53, 54, 58, 59, 95, 120  # yard 2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120
                         'filter_labels': [2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120],   # 3, 6, 9, 11, 12, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路 
                         'filter_keep': False,   # drop specified labels
-                        'target_frame': 'zed_left_camera_optical_frame',
+                        'target_frame': 'rs_d455_color_optical_frame',
                     }],
-                    remappings=[('rgb/camera_info', '/zed/zed_node/rgb/color/rect/camera_info'),
+                    # to be changed too many here
+                    remappings=[('rgb/camera_info', '/camera/rs_d455/color/camera_info'),
                                 ('combined/image_rect_combined', '/internimage/combined_segmentation_mask'),
-                                ('depth_registered/image_rect','/zed/zed_node/depth/depth_registered/decompressed'), #   /zed/zed_node/depth/depth_registered
+                                ('depth_registered/image_rect','/camera/rs_d455/depth/image_rect_raw'), #   /zed/zed_node/depth/depth_registered
                                 ('lidar/points', '/cloud_registered/acc/filtered/voxel'),
                                 ('points', '/internimage/segmentation/projected/points'),
                                 ('ground_points', '/internimage/segmentation/ground_points')]

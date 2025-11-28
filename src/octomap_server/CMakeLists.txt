@@ -18,12 +18,7 @@ ament_auto_find_build_dependencies()
 find_package(OCTOMAP REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(geometry_msgs REQUIRED)
-rosidl_generate_interfaces(${PROJECT_NAME}_interfaces
-  "srv/ListBoundingBoxQuery.srv"
-	DEPENDENCIES
-		geometry_msgs
-)
-ament_export_dependencies(rosidl_default_runtime)
+find_package(octomap_extra_msgs REQUIRED)
 
 ament_auto_add_library(octomap_server_static SHARED
   src/octomap_server_static.cpp
@@ -47,7 +42,6 @@ rclcpp_components_register_node(octomap_server_static
 ament_auto_add_library(octomap_server SHARED
   src/octomap_server.cpp
 )
-rosidl_target_interfaces(octomap_server ${PROJECT_NAME}_interfaces "rosidl_typesupport_cpp")
 
 target_link_libraries(octomap_server
   ${OCTOMAP_LIBRARIES}
@@ -58,8 +52,6 @@ rclcpp_components_register_node(octomap_server
   PLUGIN "octomap_server::OctomapServer"
   EXECUTABLE octomap_server_node
 )
-
-add_dependencies(octomap_server octomap_server_interfaces)
 
 ament_auto_add_library(octomap_server_multilayer SHARED
   src/octomap_server.cpp

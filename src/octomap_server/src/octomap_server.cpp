@@ -322,6 +322,8 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
     "octomap_full", std::bind(&OctomapServer::onOctomapFullSrv, this, _1, _2));
   clear_bbox_srv_ = create_service<BBoxSrv>(
     "~/clear_bbox", std::bind(&OctomapServer::clearBBoxSrv, this, _1, _2));
+  clear_list_bbox_srv_ = create_service<ListBBoxSrv>(
+    "~/clear_list_bbox", std::bind(&OctomapServer::clearListBBoxSrv, this, _1, _2));
   reset_srv_ = create_service<ResetSrv>(
     "~/reset", std::bind(&OctomapServer::resetSrv, this, _1, _2));
 
@@ -934,12 +936,12 @@ bool OctomapServer::clearListBBoxSrv(
 
   for (const auto &point : req->center) {
     geometry_msgs::msg::Point min_pt, max_pt;
-    min_pt.x = point.x - req->radius * 0.5;
-    min_pt.y = point.y - req->radius * 0.5;
-    min_pt.z = point.z - req->radius * 0.5;
-    max_pt.x = point.x + req->radius * 0.5;
-    max_pt.y = point.y + req->radius * 0.5;
-    max_pt.z = point.z + req->radius * 0.5;
+    min_pt.x = point.x - req->bbox_size * 0.5;
+    min_pt.y = point.y - req->bbox_size * 0.5;
+    min_pt.z = point.z - req->bbox_size * 0.5;
+    max_pt.x = point.x + req->bbox_size * 0.5;
+    max_pt.y = point.y + req->bbox_size * 0.5;
+    max_pt.z = point.z + req->bbox_size * 0.5;
     const auto min = octomap::pointMsgToOctomap(min_pt);
     const auto max = octomap::pointMsgToOctomap(max_pt);
     const double thres_min = octree_->getClampingThresMin();

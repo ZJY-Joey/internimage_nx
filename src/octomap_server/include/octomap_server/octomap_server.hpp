@@ -64,7 +64,7 @@
 #include "octomap_msgs/conversions.h"
 
 #include "octomap_ros/conversions.hpp"
-#include "octomap_server/srv/list_bounding_box_query.hpp"
+#include "octomap_extra_msgs/srv/list_bounding_box_query.hpp"
 
 // switch color here - easier maintenance, only maintain OctomapServer.
 // Two targets are defined in the cmake, octomap_server_color and octomap_server.
@@ -104,7 +104,7 @@ public:
   using OctomapSrv = octomap_msgs::srv::GetOctomap;
   using BBoxSrv = octomap_msgs::srv::BoundingBoxQuery;
   using ResetSrv = std_srvs::srv::Empty;
-  using ListBBoxSrv = octomap_server::srv::ListBoundingBoxQuery;
+  using ListBBoxSrv = octomap_extra_msgs::srv::ListBoundingBoxQuery;
 
   explicit OctomapServer(const rclcpp::NodeOptions & node_options);
   virtual bool onOctomapBinarySrv(
@@ -256,6 +256,7 @@ protected:
   rclcpp::Service<OctomapSrv>::SharedPtr octomap_binary_srv_;
   rclcpp::Service<OctomapSrv>::SharedPtr octomap_full_srv_;
   rclcpp::Service<BBoxSrv>::SharedPtr clear_bbox_srv_;
+  rclcpp::Service<ListBBoxSrv>::SharedPtr clear_list_bbox_srv_;
   rclcpp::Service<ResetSrv>::SharedPtr reset_srv_;
   std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
