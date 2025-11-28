@@ -1,5 +1,8 @@
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/point_cloud.h>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <pcl_conversions/pcl_conversions.h>
 #include <std_srvs/srv/empty.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -17,6 +20,23 @@ using std::placeholders::_1;
 
 namespace depth_cloud_acc
 {
+
+bool isFieldsEqual(
+  const std::vector<pcl::PCLPointField> & fields1,
+  const std::vector<pcl::PCLPointField> & fields2)
+{
+  if (fields1.size() != fields2.size()) return false;
+  for (size_t i = 0; i < fields1.size(); ++i) {
+    if (fields1[i].name != fields2[i].name ||
+        fields1[i].offset != fields2[i].offset ||
+        fields1[i].datatype != fields2[i].datatype ||
+        fields1[i].count != fields2[i].count) {
+      return false;
+    }
+  }
+  return true;
+}
+
 
 class DepthCloudAccNode : public rclcpp::Node
 {
@@ -37,6 +57,8 @@ public:
     this->declare_parameter<int>("log_every_n", 20);
     this->declare_parameter<bool>("acc_cloud_registered", false);
     this->declare_parameter<int>("max_aggregated_frames", 10);
+    this->declare_parameter<double>("voxel_leaf_size", 1.0);
+    this->declare_parameter<int>("min_points_per_voxel", 5);
 
     input_topic_ = this->get_parameter("input_depth_points_topic").as_string();
     output_topic_ = this->get_parameter("output_depth_points_topic").as_string();
@@ -50,6 +72,8 @@ public:
     log_every_n_ = this->get_parameter("log_every_n").as_int();
     acc_cloud_registered_ = this->get_parameter("acc_cloud_registered").as_bool();
     max_aggregated_frames_ = this->get_parameter("max_aggregated_frames").as_int();
+    voxel_leaf_size_ = this->get_parameter("voxel_leaf_size").as_double();
+    min_points_per_voxel_ = this->get_parameter("min_points_per_voxel").as_int();
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     // construct TransformListener with node pointer
@@ -106,58 +130,101 @@ private:
     // RCLCPP_INFO(this->get_logger(), "Adding cloud with %u points to aggregation", cloud->width);
 
     // append to deque and aggregated
+    // Convert incoming cloud to PCLPointCloud2 for internal storage
+    pcl::PCLPointCloud2::Ptr pcl_cloud(new pcl::PCLPointCloud2());
+    pcl::PCLPointCloud2 tmp;
+    pcl_conversions::toPCL(*cloud, tmp);
+    *pcl_cloud = tmp;
+    pcl_cloud->header.frame_id = fixed_frame_;
+
     if (max_clouds_ > 0) {
       if ((int)clouds_.size() >= max_clouds_) {
         clouds_.pop_front();
       }
-      clouds_.push_back(cloud);
+      clouds_.push_back(pcl_cloud);
     }
-    append_to_aggregated(cloud);
+    append_to_aggregated(pcl_cloud);
     if (++received_count_ % std::max(1, log_every_n_) == 0) {
       // RCLCPP_INFO(this->get_logger(), "Received %d clouds | aggregated_points=%u", received_count_, aggregated_ ? aggregated_->width : 0);
     }
   }
 
-  void append_to_aggregated(const sensor_msgs::msg::PointCloud2::SharedPtr & cloud)
+  void append_to_aggregated(const pcl::PCLPointCloud2::Ptr & cloud)
   {
     // for (const auto &field : cloud->fields) {
     //   std::cout << field.name << " " << field.offset << " " << field.datatype << " " << field.count << "\n";
     // }
     // std::cout << "--------------------------------------------------------" << std::endl;
     if (!aggregated_) {
-      aggregated_ = std::make_shared<sensor_msgs::msg::PointCloud2>(*cloud);
-      // ensure mutable data buffer
-      aggregated_->point_step = cloud->point_step;
-      aggregated_->is_bigendian = cloud->is_bigendian;
+      aggregated_.reset(new pcl::PCLPointCloud2());
       aggregated_->fields = cloud->fields;
-      aggregated_->height = cloud->height;
-      aggregated_->data = cloud->data;
-      return;
-    }
-
-    // basic compatibility checks
-    if (cloud->point_step != aggregated_->point_step ||
-        cloud->is_bigendian != aggregated_->is_bigendian ||
-        cloud->fields != aggregated_->fields ||
-        cloud->height != aggregated_->height) {
-      RCLCPP_WARN(this->get_logger(), "not compatible");
+      aggregated_->is_bigendian = cloud->is_bigendian;
+      aggregated_->point_step = cloud->point_step;
+      aggregated_->height = 1;
+      aggregated_->width = 0;
+      aggregated_->row_step = 0;
+      aggregated_->header.frame_id = fixed_frame_;
+      aggregated_->data.clear();
+      for (const auto &field : aggregated_->fields) {
+        RCLCPP_INFO(this->get_logger(), "Aggregated field: %s offset=%u datatype=%u count=%u",
+          field.name.c_str(), field.offset, field.datatype, field.count);
+      }
+    } else if (cloud->point_step != aggregated_->point_step ||
+               cloud->is_bigendian != aggregated_->is_bigendian ||
+               !isFieldsEqual(cloud->fields, aggregated_->fields)) {
+      RCLCPP_WARN(this->get_logger(), "Incoming cloud not compatible with aggregated layout (point_step/endianness/fields)");
       return;
     }
 
     // append data
     aggregated_->data.insert(aggregated_->data.end(), cloud->data.begin(), cloud->data.end());
-    aggregated_->width += cloud->width;
+    const size_t cloud_points = static_cast<size_t>(cloud->width) * static_cast<size_t>(cloud->height);
+    aggregated_->width += static_cast<uint32_t>(cloud_points);
+    aggregated_->height = 1;
     aggregated_->row_step = aggregated_->width * aggregated_->point_step;
     aggregated_->header.frame_id = fixed_frame_;
     ++aggregated_frames_;
-    enforce_limits();
+  }
+
+  void downsample_aggregated()
+  {
+    RCLCPP_INFO(this->get_logger(), "Downsampling aggregated cloud with %u points", aggregated_ ? aggregated_->width : 0);
+    if (!aggregated_ || aggregated_->width == 0) {
+      return;
+    }
+    try {
+      pcl::PCLPointCloud2::Ptr input(new pcl::PCLPointCloud2(*aggregated_));
+      pcl::PCLPointCloud2::Ptr output(new pcl::PCLPointCloud2());
+      pcl::VoxelGrid<pcl::PCLPointCloud2> vox;
+      vox.setInputCloud(input);
+      vox.setLeafSize(static_cast<float>(voxel_leaf_size_),
+                      static_cast<float>(voxel_leaf_size_),
+                      static_cast<float>(voxel_leaf_size_));
+      vox.filter(*output);
+
+      // Preserve header/frame
+      output->header.frame_id = fixed_frame_;
+      aggregated_ = output;
+      RCLCPP_INFO(this->get_logger(), "Downsampled aggregated cloud to width=%u", aggregated_->width);
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(this->get_logger(), "Downsampling failed: %s", e.what());
+    }
   }
 
   void publish_map()
   {
     if (aggregated_) {
-      aggregated_->header.stamp = this->now();
-      publisher_->publish(*aggregated_);
+      downsample_aggregated();
+      // Convert PCL aggregated cloud back to sensor_msgs for publishing
+      sensor_msgs::msg::PointCloud2 out_msg;
+      pcl::PCLPointCloud2 pcl_out = *aggregated_;
+      // Update stamp to current time
+      pcl_out.header.stamp = static_cast<std::uint64_t>(this->now().nanoseconds());
+      pcl_out.header.frame_id = fixed_frame_;
+      pcl_conversions::fromPCL(pcl_out, out_msg);
+      out_msg.header.stamp = this->now();
+      out_msg.header.frame_id = fixed_frame_;
+      publisher_->publish(out_msg);
     }
   }
 
@@ -187,7 +254,7 @@ private:
 
     // Default: rebuild from tail of deque
     if (clouds_.empty()) return; // should not happen
-    auto rebuilt = std::make_shared<sensor_msgs::msg::PointCloud2>();
+    auto rebuilt = std::make_shared<pcl::PCLPointCloud2>();
     bool base_set = false;
     int kept = 0;
     for (auto it = clouds_.rbegin(); it != clouds_.rend() && kept < rebuild_keep_last_clouds_; ++it) {
@@ -197,7 +264,7 @@ private:
         rebuilt->data = c->data;
         base_set = true;
       } else {
-        if (c->point_step != rebuilt->point_step || c->is_bigendian != rebuilt->is_bigendian || c->fields != rebuilt->fields || c->height != rebuilt->height) {
+        if (c->point_step != rebuilt->point_step || c->is_bigendian != rebuilt->is_bigendian || !isFieldsEqual(c->fields, rebuilt->fields) || c->height != rebuilt->height) {
           // skip incompatible older cloud
           continue;
         }
@@ -233,6 +300,8 @@ private:
   bool acc_cloud_registered_;
   int aggregated_frames_{0};
   int max_aggregated_frames_;
+  double voxel_leaf_size_;
+  int min_points_per_voxel_;
 
 
 
@@ -247,8 +316,8 @@ private:
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr reset_srv_;
 
   // data
-  std::deque<sensor_msgs::msg::PointCloud2::SharedPtr> clouds_;
-  sensor_msgs::msg::PointCloud2::SharedPtr aggregated_;
+  pcl::PCLPointCloud2::Ptr aggregated_;
+  std::deque<pcl::PCLPointCloud2::Ptr> clouds_;
 };
 
 

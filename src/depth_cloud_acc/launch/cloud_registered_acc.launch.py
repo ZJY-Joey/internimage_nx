@@ -44,23 +44,23 @@ def generate_launch_description():
                 ),
 
 
-                  launch_ros.descriptions.ComposableNode(
-                    package='pcl_ros',
-                    plugin='pcl_ros::VoxelGrid',
-                    name='voxel_grid_node_ground',
-                    parameters=[{
-                        'use_sim_time': use_sim_time,
-                        'input_frame': 'aliengo',
-                        'output_frame': 'world',  
-                        'leaf_size': 1.5,
-                        'filter_field_name': 'z',
-                        'filter_limit_min': -1000.0,
-                        'filter_limit_max': 1000.0,
-                        # 'min_points_per_voxel': 100,
-                    }],
-                    remappings=[('input', '/cloud_registered/acc/filtered'),
-                                ('output', '/cloud_registered/acc/filtered/voxel')]
-                ),
+                #   launch_ros.descriptions.ComposableNode(
+                #     package='pcl_ros',
+                #     plugin='pcl_ros::VoxelGrid',
+                #     name='voxel_grid_node_ground',
+                #     parameters=[{
+                #         'use_sim_time': use_sim_time,
+                #         'input_frame': 'aliengo',
+                #         'output_frame': 'world',  
+                #         'leaf_size': 1.5,
+                #         'filter_field_name': 'z',
+                #         'filter_limit_min': -1000.0,
+                #         'filter_limit_max': 1000.0,
+                #         # 'min_points_per_voxel': 100,
+                #     }],
+                #     remappings=[('input', '/cloud_registered/acc/filtered'),
+                #                 ('output', '/cloud_registered/acc/filtered/voxel')]
+                # ),
 
                 # launch_ros.descriptions.ComposableNode(
                 #     package='pcl_ros',
@@ -88,7 +88,7 @@ def generate_launch_description():
         executable='depth_cloud_acc',
         name='depth_cloud_acc',
         parameters=[params_file, {'use_sim_time': use_sim_time,}],
-        output='screen'
+        output='screen',
     )
     
 
@@ -97,7 +97,7 @@ def generate_launch_description():
     ld = LaunchDescription([
         use_sim_time_arg,
         depth_cloud_acc_node,
-        cloud_registered_passthrough_container,
+        # cloud_registered_passthrough_container,
     ])
     return ld
         
