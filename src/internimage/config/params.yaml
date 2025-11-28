@@ -2,8 +2,8 @@ internimage:
   ros__parameters:
     use_sim_time: true
     # subscribe topics
-    image_topic: "/camera/rs_d455/color/image_raw/compressedDepth"
-    model_name: "upernet_internimage_xl_600x960_fp16"
+    image_topic: "/camera/rs_d455/color/image_raw/compressed"
+    model_name: "upernet_internimage_h_480x848_fp16"
 
     # combine segmentation info with original image  limit:classes<255 or combined info will be incorrect
     publish_combined: true   # whether to publish combined segmentation result

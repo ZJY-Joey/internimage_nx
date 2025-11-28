@@ -7,6 +7,8 @@
 #include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 // tf2 core transform function template
 #include <tf2/transform_datatypes.h>
+#include <pcl/filters/voxel_grid.h>
+
 
 #include <deque>
 #include <memory>

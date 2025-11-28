@@ -15,6 +15,7 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(pcl_ros REQUIRED)
 
 add_executable(depth_cloud_acc src/depth_cloud_acc.cpp)
 target_include_directories(depth_cloud_acc PUBLIC
@@ -30,6 +31,7 @@ ament_target_dependencies(depth_cloud_acc
   tf2_sensor_msgs
   geometry_msgs
   std_srvs
+  pcl_ros
 )
 
 install(TARGETS depth_cloud_acc

@@ -275,27 +275,17 @@ void PointCloudXyzrgbLabelNode::imageCb(
 
 
   if (!filter_labels_.empty()) {
-    // convert depth image to pointcloud with condition filter of label
-    if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_16UC1) {
-      throw std::runtime_error("depth msg encoding TYPE_16UC1 not supported.");
-    } else if (depth_msg->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-      if(latest_transformed_pointcloud_ == nullptr){
-        RCLCPP_ERROR(
-        get_logger(), "No LiDAR pointcloud received yet, cannot proceed.");
-        return;
-      }
-      if(latest_transformed_pointcloud_->header.stamp != last_processed_lidar_cloud_stamp_){
-        PointCloud2::ConstSharedPtr pointcloud_ptr = latest_transformed_pointcloud_;
-        convertLabelAndRgbWithLidar<float>(cloud_msg, combined_msg, pointcloud_ptr, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset);
-        convertLabelAndRgbWithLidar<float>(ground_cloud_msg, combined_msg, pointcloud_ptr, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset);
-        last_processed_lidar_cloud_stamp_ = pointcloud_ptr->header.stamp;
-      }
-    }else {
+    if(latest_transformed_pointcloud_ == nullptr){
       RCLCPP_ERROR(
-        get_logger(), "Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
+      get_logger(), "No LiDAR pointcloud received yet, cannot proceed.");
       return;
     }
-  
+    if(latest_transformed_pointcloud_->header.stamp != last_processed_lidar_cloud_stamp_){
+      PointCloud2::ConstSharedPtr pointcloud_ptr = latest_transformed_pointcloud_;
+      convertLabelAndRgbWithLidar<float>(cloud_msg, combined_msg, pointcloud_ptr, filter_labels_, filter_keep_, model_, red_offset, green_offset, blue_offset);
+      convertLabelAndRgbWithLidar<float>(ground_cloud_msg, combined_msg, pointcloud_ptr, filter_labels_, !filter_keep_, model_, red_offset, green_offset, blue_offset);
+      last_processed_lidar_cloud_stamp_ = pointcloud_ptr->header.stamp;
+    }
   }else{
     throw std::runtime_error("No filter labels specified, full pointcloud generation not implemented yet.");
     return;

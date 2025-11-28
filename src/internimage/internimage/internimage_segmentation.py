@@ -467,7 +467,7 @@ class InternImageNode(Node):
             # print("trt_shape:", trt_outputs[0].shape)
             # print("trt_outputs[0] dtype:", trt_outputs[0].dtype)
 
-            self.segmentation_result = trt_outputs[0].reshape((self.trt_h, self.trt_w))  # (H,W) 类别ID整型图 (模型输出分辨率)
+            self.segmentation_result = trt_outputs[0].reshape((self.trt_h, self.trt_w)) 
             # print("segmentation shape:", self.segmentation_result.shape)
             # print("segmentation[0][0]:", self.segmentation_result[0][0])
 

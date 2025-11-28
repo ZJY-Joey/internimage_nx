@@ -6,15 +6,15 @@ depth_cloud_acc:
     # accumulate fixed frame
     fixed_frame: "world"
     publish_period: 0.01  # seconds
-    max_clouds: 10000  # number of raw clouds retained in deque for accumulation
+    max_clouds: 3000  # number of raw clouds retained in deque for accumulation
     enable_transform: true
     lookup_timeout: 0.2  # seconds
     log_every_n: 100
-    max_aggregated_points: 50000
-    rebuild_keep_last_clouds: 10000 # number of last clouds to keep when using 'rebuild = slide window' strategy same as max_aggregated_frames
+    max_aggregated_points: 500000
+    rebuild_keep_last_clouds: 3000 # number of last clouds to keep when using 'rebuild = slide window' strategy same as max_aggregated_frames
     aggregation_strategy: "rebuild"  # or 'rebuild = slide window'
 
     # params for registered cloud accumulation
     acc_cloud_registered: true
-    max_aggregated_frames: 10000  # number of frames to be accumulated
+    max_aggregated_frames: 3000  # number of frames to be accumulated
  

@@ -21,6 +21,15 @@ def generate_launch_description():
 
 
     # internimage segmentation
+    rs_launch_file_path = os.path.join(
+        get_package_share_directory('atec_internimage'), 'launch', 'rs_launch.py'
+    )
+    rs_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(rs_launch_file_path),
+        launch_arguments={'use_sim_time': use_sim_time }.items()
+    )
+
+    # internimage segmentation
     internimage_launch_file_path = os.path.join(
         get_package_share_directory('internimage'), 'launch', 'internimage_launch.py'
     )
@@ -79,6 +88,7 @@ def generate_launch_description():
 
     ld = LaunchDescription([
         use_sim_time_arg,
+        rs_node,
         internimage_node,
         cloud_registered_acc_node,
         depth_proc_node,
