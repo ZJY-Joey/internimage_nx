@@ -121,7 +121,7 @@ public:
 
     std::vector<geometry_msgs::msg::Point> ground_points;
     for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z){
-      double t1  = omp_get_wtime();
+      
       geometry_msgs::msg::PointStamped pt_src;
       pt_src.header.frame_id = source_frame;
       pt_src.header.stamp = msg->header.stamp;
@@ -136,12 +136,12 @@ public:
       }
       ground_points.push_back(pt_map.point);
       
-      double t2 = omp_get_wtime();
-      RCLCPP_INFO(this->get_logger(), "Time to clear bbox: %.6f seconds", t2 - t1);
+     
     }
-    
+    double t1  = omp_get_wtime();
     call_clear_bbox_service(ground_points, this->bbox_size_);
-
+    double t2 = omp_get_wtime();
+    RCLCPP_INFO(this->get_logger(), "Time to clear bbox: %.6f seconds", t2 - t1);
 
   }
 
