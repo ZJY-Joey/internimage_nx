@@ -1,21 +1,21 @@
-livox_lidar_acc:
+depth_cloud_acc:
   ros__parameters:
     # subscribe topics
     input_depth_points_topic: "/internimage/segmentation/ground_points"
     output_depth_points_topic: "/internimage/segmentation/ground_points/acc"
     # accumulate fixed frame
     fixed_frame: "world"
-    publish_period: 0.5  # seconds
-    max_clouds: 300  # number of raw clouds retained in deque for accumulation
+    publish_period: 1.0  # seconds
+    max_clouds: 30000  # number of raw clouds retained in deque for accumulation
     enable_transform: true
     lookup_timeout: 0.2  # seconds
     log_every_n: 100
-    max_aggregated_points: 5000000
-    rebuild_keep_last_clouds: 300 # number of last clouds to keep when using 'rebuild = slide window' strategy same as max_aggregated_frames
+    max_aggregated_points: 500000
+    rebuild_keep_last_clouds: 30000 # number of last clouds to keep when using 'rebuild = slide window' strategy same as max_aggregated_frames
     aggregation_strategy: "rebuild"  # or 'rebuild = slide window'
 
     # params for registered cloud accumulation
     acc_cloud_registered: true
-    max_aggregated_frames: 300  # number of frames to be accumulated
-    voxel_leaf_size: 1.0
+    max_aggregated_frames: 30000  # number of frames to be accumulated
+    voxel_leaf_size: 0.3
  

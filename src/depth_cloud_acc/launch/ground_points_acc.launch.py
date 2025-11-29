@@ -20,44 +20,42 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration("use_sim_time")
 
-
-    container_pro_map = ComposableNodeContainer(
-        name='container_pro_map',
+    ground_passthrough_container = ComposableNodeContainer(
+        name='ground_points_passthrough_container',
         namespace='',
         package='rclcpp_components',
         executable='component_container',
         composable_node_descriptions=[
-            launch_ros.descriptions.ComposableNode(
-                package='pcl_ros',
-                plugin='pcl_ros::VoxelGrid',
-                name='voxel_grid_node_acc_map',
-                parameters=[
-                    {
+            # for cloud acc
+            # in case some points in the back shouldn't be acc
+                launch_ros.descriptions.ComposableNode(
+                    package='pcl_ros',
+                    plugin='pcl_ros::PassThrough',
+                    name='ground_points_x_passthrough_x_node',
+                    parameters=[{
                         'use_sim_time': use_sim_time,
-                        'input_frame': 'world',
-                        'output_frame': 'world',  
-                        'leaf_size': 0.1,
-                        'filter_field_name': 'z',
-                        'filter_limit_min': -1000.0,
-                        'filter_limit_max': 1000.0,
-                    }
-                ],
-                remappings=[('input', '/internimage/segmentation/acc_global_map'),
-                            ('output', '/internimage/segmentation/acc_global_map/voxeled')]
-            ),
+                        'input_frame': 'aliengo',
+                        'output_frame': 'camera_init',  
+                        'filter_field_name': 'x',
+                        'filter_limit_min': 0.0,
+                        'filter_limit_max': 100.0,
+                    }],
+                    remappings=[('input', '/internimage/segmentation/ground_points/acc'),
+                                ('output', '/internimage/segmentation/ground_points/acc/filtered_x')]
+                ),
 
+            
         ],
         output='screen',
     )
 
-    ground_points_for_clear_node = Node(
+
+    ground_points_acc_node = Node(
         package='depth_cloud_acc',
         executable='depth_cloud_acc',
         name='depth_cloud_acc',
-        parameters=[params_file, {
-            'use_sim_time': use_sim_time,
-        }],
-        output='screen'
+        parameters=[params_file, {'use_sim_time': use_sim_time,}],
+        output='screen',
     )
     
 
@@ -65,8 +63,8 @@ def generate_launch_description():
     
     ld = LaunchDescription([
         use_sim_time_arg,
-        # container_pro_map,
-        ground_points_for_clear_node,
+        ground_points_acc_node,
+        ground_passthrough_container,
     ])
     return ld
         

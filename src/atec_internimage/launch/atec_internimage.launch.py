@@ -109,7 +109,7 @@ def generate_launch_description():
         internimage_node,
         # cloud_registered_acc_node,
         livox_lidar_acc_node,
-        # ground_points_acc_node,
+        ground_points_acc_node,
         depth_proc_node,
         global_map_node,
         depth_cloud_octomap_node,

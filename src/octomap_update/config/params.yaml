@@ -1,7 +1,7 @@
 octomap_update:
   ros__parameters:
-    input_topic: "/internimage/segmentation/ground_points"
+    input_topic: "/internimage/segmentation/ground_points/acc/filtered_x"
     # voxel cube size for clearing bbox in octomap
     log_each_bbox: true
-    bbox_size: 0.2  
+    bbox_size: 0.3  
     target_frame: "world"
