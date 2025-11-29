@@ -47,6 +47,14 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
 
+    livox_lidar_acc_launch_file_path = os.path.join(
+        get_package_share_directory('livox_lidar_acc'), 'launch', 'livox_lidar_acc.launch.py'
+    )
+    livox_lidar_acc_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(livox_lidar_acc_launch_file_path),
+        launch_arguments={'use_sim_time': use_sim_time }.items(),
+    )
+
 
     # depth image proc to pointcloud xyzrgb label   
     depth_proc_launch_file_path = os.path.join(
@@ -57,12 +65,21 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
 
-    # depth cloud accumulation and voxel
-    depth_cloud_acc_launch_file_path = os.path.join(
-        get_package_share_directory('depth_cloud_acc'), 'launch', 'depth_cloud_acc.launch.py'
+    # global_map acc for sam3 
+    global_map_launch_file_path = os.path.join(
+        get_package_share_directory('livox_lidar_acc'), 'launch', 'global_map_for_sam3.launch.py'
     )
-    depth_cloud_acc_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(depth_cloud_acc_launch_file_path),
+    global_map_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(global_map_launch_file_path),
+        launch_arguments={'use_sim_time': use_sim_time }.items(),
+    )
+
+    # ground points for octomap clear
+    ground_points_acc_launch_file_path = os.path.join(
+        get_package_share_directory('depth_cloud_acc'), 'launch', 'ground_points_acc.launch.py'
+    )
+    ground_points_acc_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(ground_points_acc_launch_file_path),
         launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
 
@@ -90,9 +107,11 @@ def generate_launch_description():
         use_sim_time_arg,
         rs_node,
         internimage_node,
-        cloud_registered_acc_node,
+        # cloud_registered_acc_node,
+        livox_lidar_acc_node,
+        # ground_points_acc_node,
         depth_proc_node,
-        depth_cloud_acc_node,
+        global_map_node,
         depth_cloud_octomap_node,
         # octomap_update_node,
     ])
