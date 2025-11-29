@@ -364,7 +364,7 @@ void convertLabelAndRgbWithLidar(
   const image_geometry::PinholeCameraModel & model,
   int red_offset, int green_offset, int blue_offset)
 {
-  std::cout<<"call convertLabelAndRgbWithLidar"<<std::endl;
+  // std::cout<<"call convertLabelAndRgbWithLidar"<<std::endl;
   // If no LiDAR, output empty cloud
   if (!lidar_msg) {
     cloud_msg->data.clear();
@@ -375,7 +375,6 @@ void convertLabelAndRgbWithLidar(
     std::cout << "cloud_msg points: 0" << std::endl;
     return;
   }
-
 
   const int img_w = static_cast<int>(combined_msg->width);
   const int img_h = static_cast<int>(combined_msg->height);
@@ -411,6 +410,10 @@ void convertLabelAndRgbWithLidar(
   // Prepare a reusable buffer for one point record
   std::vector<uint8_t> one_point(point_step, 0);
 
+  // define an depth image
+  const size_t map_size = static_cast<size_t>(img_w * img_h);
+  std::vector<float> min_distances(map_size, std::numeric_limits<float>::max());
+
   for (; in_x != in_x.end(); ++in_x, ++in_y, ++in_z) {
     const float X = *in_x;
     const float Y = *in_y;
@@ -421,6 +424,8 @@ void convertLabelAndRgbWithLidar(
       continue;
     }
 
+    float distance = std::sqrt(std::pow(X, 2) + std::pow(Y, 2) + std::pow(Z, 2));
+
     // Project LiDAR point to image
     const cv::Point2d uv = model.project3dToPixel(cv::Point3d(X, Y, Z));
     const int u = static_cast<int>(uv.x);
@@ -429,6 +434,12 @@ void convertLabelAndRgbWithLidar(
     if (u < 0 || u >= img_w || v < 0 || v >= img_h) {
       continue; // discard if outside combined_msg bounds (no semantic label)
     }
+
+    const size_t map_index = static_cast<size_t>(v * img_w + u);
+    if (distance > min_distances[map_index]) {
+      continue; 
+    }
+    min_distances[map_index] = distance;
 
     const int base = v * static_cast<int>(combined_msg->step) + u * combined_pixel_step;
     const uint8_t * px = &combined_msg->data[base];
