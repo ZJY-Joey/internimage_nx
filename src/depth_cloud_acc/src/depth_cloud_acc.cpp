@@ -15,6 +15,7 @@
 
 #include <deque>
 #include <memory>
+#include <mutex>
 
 using std::placeholders::_1;
 
@@ -54,13 +55,14 @@ public:
     this->declare_parameter<int>("log_every_n", 20);
     this->declare_parameter<bool>("acc_cloud_registered", false);
     this->declare_parameter<double>("voxel_leaf_size", 0.1);
+    this->declare_parameter<int>("max_points", 500000);
     // passthrough limits relative to robot_frame
     this->declare_parameter<double>("pass_x_min", -10.0);
     this->declare_parameter<double>("pass_x_max", 10.0);
     this->declare_parameter<double>("pass_y_min", -10.0);
     this->declare_parameter<double>("pass_y_max", 10.0);
     this->declare_parameter<double>("pass_z_min", -2.0);
-    this->declare_parameter<double>("pass_z_max", 5.0);
+    this->declare_parameter<double>("pass_z_max", 2.0);
 
     input_topic_ = this->get_parameter("input_depth_points_topic").as_string();
     output_topic_ = this->get_parameter("output_depth_points_topic").as_string();
@@ -72,6 +74,20 @@ public:
     log_every_n_ = this->get_parameter("log_every_n").as_int();
     acc_cloud_registered_ = this->get_parameter("acc_cloud_registered").as_bool();
     voxel_leaf_size_ = this->get_parameter("voxel_leaf_size").as_double();
+    max_points_ = this->get_parameter("max_points").as_int();
+
+    // Validate parameters for safety
+    if (voxel_leaf_size_ <= 0.0) {
+      RCLCPP_WARN(this->get_logger(), "voxel_leaf_size must be > 0. Resetting to 0.1");
+      voxel_leaf_size_ = 0.1;
+    }
+    if (max_points_ <= 0) {
+      RCLCPP_WARN(this->get_logger(), "max_points must be > 0. Resetting to 500000");
+      max_points_ = 500000;
+    }
+    if (pass_x_min_ > pass_x_max_) std::swap(pass_x_min_, pass_x_max_);
+    if (pass_y_min_ > pass_y_max_) std::swap(pass_y_min_, pass_y_max_);
+    if (pass_z_min_ > pass_z_max_) std::swap(pass_z_min_, pass_z_max_);
 
     pass_x_min_ = this->get_parameter("pass_x_min").as_double();
     pass_x_max_ = this->get_parameter("pass_x_max").as_double();
@@ -110,6 +126,7 @@ public:
 private:
   void filter_aggregated_in_robot_frame()
   {
+    std::lock_guard<std::mutex> lock(agg_mutex_);
     if (!aggregated_ || aggregated_->width == 0) return;
     try {
       // Get robot position (translation only) in fixed_frame
@@ -121,8 +138,7 @@ private:
         ry = t.transform.translation.y;
         rz = t.transform.translation.z;
       }
-
-      RCLCPP_INFO(this->get_logger(), "Filterering aggregated cloud with %u points", aggregated_ ? aggregated_->width : 0);
+      RCLCPP_INFO(this->get_logger(), "Filtering aggregated cloud with %u points", aggregated_ ? aggregated_->width : 0);
       pcl::PCLPointCloud2::Ptr input(new pcl::PCLPointCloud2(*aggregated_));
       pcl::PCLPointCloud2::Ptr output(new pcl::PCLPointCloud2());
       pcl::PassThrough<pcl::PCLPointCloud2> pass;
@@ -143,7 +159,9 @@ private:
       input.reset(new pcl::PCLPointCloud2(*output));
       output->header.frame_id = fixed_frame_;
       aggregated_.reset(new pcl::PCLPointCloud2(*output));
-      RCLCPP_INFO(this->get_logger(), "Filterered aggregated cloud to width=%u", aggregated_->width);
+      RCLCPP_INFO(this->get_logger(), "Filtered aggregated cloud to width=%u", aggregated_->width);
+    } catch (const tf2::TransformException & e) {
+      RCLCPP_WARN(this->get_logger(), "Filtering aggregated failed (TF): %s", e.what());
     } catch (const std::exception & e) {
       RCLCPP_WARN(this->get_logger(), "Filtering aggregated failed: %s", e.what());
     }
@@ -157,8 +175,8 @@ private:
       try {
         // RCLCPP_INFO(this->get_logger(), "msg-> header.stamp.sec: %u", msg->header.stamp.sec);
         geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
-        fixed_frame_, msg->header.frame_id, rclcpp::Time(msg->header.stamp),
-        rclcpp::Duration::from_seconds(0.2));
+          fixed_frame_, msg->header.frame_id, rclcpp::Time(msg->header.stamp),
+          rclcpp::Duration::from_seconds(lookup_timeout_));
         // RCLCPP_INFO(this->get_logger(), "Transform found from %s to %s",
                 // msg->header.frame_id.c_str(), fixed_frame_.c_str());
         sensor_msgs::msg::PointCloud2 transformed;
@@ -168,8 +186,8 @@ private:
         transformed.header.frame_id = fixed_frame_;
         cloud = std::make_shared<sensor_msgs::msg::PointCloud2>(transformed);
         RCLCPP_DEBUG(this->get_logger(), "Transformed cloud from %s to %s", msg->header.frame_id.c_str(), fixed_frame_.c_str());
-      } catch (const std::exception & e) {
-        RCLCPP_INFO(this->get_logger(), "TF lookup/transform failed: %s", e.what());
+      } catch (const tf2::TransformException & e) {
+        RCLCPP_WARN(this->get_logger(), "TF lookup/transform failed: %s", e.what());
         // fall back to original
       }
     }
@@ -188,6 +206,14 @@ private:
 
   void append_to_aggregated(const pcl::PCLPointCloud2::Ptr & cloud)
   {
+    if (!cloud) return;
+    // Basic layout sanity check
+    if (cloud->point_step == 0) {
+      RCLCPP_WARN(this->get_logger(), "Incoming cloud point_step is 0. Ignoring.");
+      return;
+    }
+
+    std::lock_guard<std::mutex> lock(agg_mutex_);
     // for (const auto &field : cloud->fields) {
     //   std::cout << field.name << " " << field.offset << " " << field.datatype << " " << field.count << "\n";
     // }
@@ -202,14 +228,15 @@ private:
       aggregated_->row_step = 0;
       aggregated_->header.frame_id = fixed_frame_;
       aggregated_->data.clear();
-      for (const auto &field : aggregated_->fields) {
-        RCLCPP_INFO(this->get_logger(), "Aggregated field: %s offset=%u datatype=%u count=%u",
-          field.name.c_str(), field.offset, field.datatype, field.count);
-      }
+      RCLCPP_DEBUG(this->get_logger(), "Initialized aggregated cloud with %zu fields", aggregated_->fields.size());
     } else if (cloud->point_step != aggregated_->point_step ||
                cloud->is_bigendian != aggregated_->is_bigendian ||
                !isFieldsEqual(cloud->fields, aggregated_->fields)) {
       RCLCPP_WARN(this->get_logger(), "Incoming cloud not compatible with aggregated layout (point_step/endianness/fields)");
+      return;
+    } else if (aggregated_->width >= static_cast<uint32_t>(max_points_)) {
+      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+        "Aggregated cloud reached max_points (%d). Ignoring further incoming clouds until reset.", max_points_);
       return;
     }
 
@@ -225,6 +252,7 @@ private:
 
   void downsample_aggregated()
   {
+    std::lock_guard<std::mutex> lock(agg_mutex_);
     RCLCPP_INFO(this->get_logger(), "Downsampling aggregated cloud with %u points", aggregated_ ? aggregated_->width : 0);
     if (!aggregated_ || aggregated_->width == 0) {
       return;
@@ -250,9 +278,15 @@ private:
 
   void publish_map()
   {
-    if (aggregated_) {
+    try {
+      {
+        std::lock_guard<std::mutex> lock(agg_mutex_);
+        if (!aggregated_ || aggregated_->width == 0) return;
+      }
+  
       filter_aggregated_in_robot_frame();
       downsample_aggregated();
+      std::lock_guard<std::mutex> lock(agg_mutex_);
       // Convert PCL aggregated cloud back to sensor_msgs for publishing
       sensor_msgs::msg::PointCloud2 out_msg;
       pcl::PCLPointCloud2 pcl_out = *aggregated_;
@@ -263,12 +297,15 @@ private:
       out_msg.header.stamp = this->now();
       out_msg.header.frame_id = fixed_frame_;
       publisher_->publish(out_msg);
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(this->get_logger(), "Publish failed: %s", e.what());
     }
   }
 
   void handle_reset(const std::shared_ptr<std_srvs::srv::Empty::Request> /*req*/,
                     std::shared_ptr<std_srvs::srv::Empty::Response> /*res*/)
   {
+    std::lock_guard<std::mutex> lock(agg_mutex_);
     aggregated_.reset();
     received_count_ = 0;
     RCLCPP_INFO(this->get_logger(), "Map reset: cleared aggregated cloud and stored clouds.");
@@ -293,6 +330,7 @@ private:
   double pass_y_max_;
   double pass_z_min_;
   double pass_z_max_;
+  int max_points_;
 
   // tf
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -306,6 +344,7 @@ private:
 
   // data
   pcl::PCLPointCloud2::Ptr aggregated_;
+  std::mutex agg_mutex_;
 };
 
 
