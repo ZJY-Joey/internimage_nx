@@ -92,9 +92,9 @@ def generate_launch_description():
         internimage_node,
         cloud_registered_acc_node,
         depth_proc_node,
-        # depth_cloud_acc_node,
+        depth_cloud_acc_node,
         depth_cloud_octomap_node,
-        octomap_update_node,
+        # octomap_update_node,
     ])
     return ld
         

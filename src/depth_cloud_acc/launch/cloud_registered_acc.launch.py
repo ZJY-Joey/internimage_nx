@@ -27,6 +27,7 @@ def generate_launch_description():
         executable='component_container',
         composable_node_descriptions=[
             # for cloud acc
+            # in case some points in the back shouldn't be acc
                 launch_ros.descriptions.ComposableNode(
                     package='pcl_ros',
                     plugin='pcl_ros::PassThrough',
@@ -39,9 +40,27 @@ def generate_launch_description():
                         'filter_limit_min': 0.0,
                         'filter_limit_max': 100.0,
                     }],
-                    remappings=[('input', '/cloud_registered/acc'),
-                                ('output', '/cloud_registered/acc/filtered')]
+                    remappings=[('input', '/cloud_registered/filtered/acc'),
+                                ('output', '/cloud_registered/filtered/acc/filtered')]
                 ),
+
+                 launch_ros.descriptions.ComposableNode(
+                    package='pcl_ros',
+                    plugin='pcl_ros::PassThrough',
+                    name='cloud_registered_passthrough_filter_node1',
+                    parameters=[{
+                        'use_sim_time': use_sim_time,
+                        'input_frame': 'aliengo',
+                        'output_frame': 'aliengo',  
+                        'filter_field_name': 'x',
+                        'filter_limit_min': 0.5,
+                        # with too many ground points, octomap server will be too slow and do not actually update
+                        'filter_limit_max': 100.0,
+                    }],
+                    remappings=[('input', '/cloud_registered'),
+                                ('output', '/cloud_registered/filtered')]
+                ),
+
 
 
                 #   launch_ros.descriptions.ComposableNode(
@@ -97,7 +116,7 @@ def generate_launch_description():
     ld = LaunchDescription([
         use_sim_time_arg,
         depth_cloud_acc_node,
-        # cloud_registered_passthrough_container,
+        cloud_registered_passthrough_container,
     ])
     return ld
         
