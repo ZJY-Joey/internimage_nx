@@ -40,8 +40,8 @@ def generate_launch_description():
                         'filter_limit_min': 0.0,
                         'filter_limit_max': 100.0,
                     }],
-                    remappings=[('input', '/cloud_registered/filtered/acc'),
-                                ('output', '/cloud_registered/filtered/acc/filtered')]
+                    remappings=[('input', '/cloud_registered/filtered_x/acc'),
+                                ('output', '/cloud_registered/filtered_x/acc/filtered_x')]
                 ),
 
                  launch_ros.descriptions.ComposableNode(
@@ -58,7 +58,7 @@ def generate_launch_description():
                         'filter_limit_max': 100.0,
                     }],
                     remappings=[('input', '/cloud_registered'),
-                                ('output', '/cloud_registered/filtered')]
+                                ('output', '/cloud_registered/filtered_x')]
                 ),
 
 
