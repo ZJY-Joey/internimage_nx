@@ -69,12 +69,12 @@ def generate_launch_description():
                 name='livox_points_passthrough_z_filter_node',
                 parameters=[{
                     'use_sim_time': use_sim_time,
-                    'input_frame': 'aliengo',
+                    'input_frame': 'world',
                     'output_frame': 'world',  
                     'filter_field_name': 'z',
-                    'filter_limit_min': -1.0,
+                    'filter_limit_min': 0.3,
                     # with too many ground points, octomap server will be too slow and do not actually update
-                    'filter_limit_max': 2.0,
+                    'filter_limit_max': 1.5,
                 }],
                 remappings=[('input', '/livox_points/acc/x_filtered'),
                             ('output', '/livox_points/acc/x_filtered/z_filtered')]
