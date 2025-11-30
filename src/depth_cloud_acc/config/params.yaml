@@ -1,7 +1,7 @@
 depth_cloud_acc:
   ros__parameters:
     # subscribe topics
-    input_depth_points_topic: "/internimage/segmentation/filtered/points"
+    input_depth_points_topic: "/internimage/segmentation/projected/points"
     output_depth_points_topic: "/internimage/segmentation/acc_global_map"
     # accumulate fixed frame
     fixed_frame: "world"

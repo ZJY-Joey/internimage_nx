@@ -67,7 +67,7 @@ def generate_launch_description():
 
     # global_map acc for sam3 
     global_map_launch_file_path = os.path.join(
-        get_package_share_directory('livox_lidar_acc'), 'launch', 'global_map_for_sam3.launch.py'
+        get_package_share_directory('depth_cloud_acc'), 'launch', 'global_map_for_sam3.launch.py'
     )
     global_map_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(global_map_launch_file_path),
@@ -105,11 +105,11 @@ def generate_launch_description():
 
     ld = LaunchDescription([
         use_sim_time_arg,
-        rs_node,
+        # rs_node,
         internimage_node,
         # cloud_registered_acc_node,
         livox_lidar_acc_node,
-        ground_points_acc_node,
+        # ground_points_acc_node,
         depth_proc_node,
         global_map_node,
         depth_cloud_octomap_node,
