@@ -14,6 +14,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <message_filters/simple_filter.h>
+
 
 
 
@@ -44,6 +46,13 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
   filter_keep_ = this->declare_parameter<bool>("filter_keep", false);
   filter_keep_ = this->get_parameter("filter_keep").as_bool();
   target_frame_ = this->get_parameter("target_frame").as_string();
+
+  this->declare_parameter<int>("outlier_reject_MeanK", 50);
+  this->declare_parameter<double>("outlier_reject_StddevMulThresh", 1.0);
+  outlier_reject_MeanK_ = this->get_parameter("outlier_reject_MeanK").as_int();
+  outlier_reject_StddevMulThresh_ = this->get_parameter("outlier_reject_StddevMulThresh").as_double();
+
+  
 
   filter_labels_.clear();
   for (const auto & v : filter_labels_param) {
@@ -83,6 +92,12 @@ PointCloudXyzrgbLabelNode::PointCloudXyzrgbLabelNode(const rclcpp::NodeOptions &
         std::placeholders::_3));
   }
 
+  lidar_cache_ = std::make_shared<PointCloudCache>();
+  
+
+  using SimpleFilter = message_filters::SimpleFilter<PointCloud2>;
+  auto dummy_filter = std::make_shared<SimpleFilter>();
+  lidar_cache_ = std::make_shared<PointCloudCache>(*dummy_filter, LIDAR_CACHE_SIZE);
 
   connectCb();
 
@@ -131,26 +146,24 @@ void PointCloudXyzrgbLabelNode::connectCb()
 
     image_transport::TransportHints combined_hints(this, "raw");
     sub_combined_.subscribe(
-        this, "combined/image_rect_combined",
-        combined_hints.getTransport(), rmw_qos_profile_default, sub_opts);
+      this, "combined/image_rect_combined",
+      combined_hints.getTransport(), rmw_qos_profile_default, sub_opts);
 
-
-    // Subscribe to lidar pointcloud using message_filters subscriber (not image_transport)
-    sub_pointcloud_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-      "lidar/points",
-      rclcpp::SensorDataQoS(),
-      std::bind(&PointCloudXyzrgbLabelNode::pointcloud_callback, this, std::placeholders::_1),
-      sub_opts);
+    if (!sub_pointcloud_cache_) {
+        rclcpp::SubscriptionOptions sub_opts;
+        auto qos = rclcpp::QoS(rclcpp::KeepLast(10)); 
+        qos.reliable();                             
+        sub_pointcloud_cache_ = create_subscription<PointCloud2>( 
+        "lidar/points",
+        qos,
+        [this](const PointCloud2::SharedPtr msg) {
+          // RCLCPP_INFO(this->get_logger(), "LiDAR PointCloud received and added to cache: %s", msg->header.frame_id.c_str());
+          lidar_cache_->add(std::static_pointer_cast<const PointCloud2>(msg));
+        },
+        sub_opts);
+    }
 
   }
-}
-
-
-void PointCloudXyzrgbLabelNode::pointcloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg){
-  // Always cache a usable LiDAR cloud in target_frame_ if possible; otherwise fallback to original
-  // std::cout<<"pointcloud_callback called"<<std::endl;
-
-  latest_lidar_pointcloud_ = msg;
 }
 
 void PointCloudXyzrgbLabelNode::imageCb(
@@ -158,6 +171,22 @@ void PointCloudXyzrgbLabelNode::imageCb(
   const Image::ConstSharedPtr & combined_msg_in,
   const CameraInfo::ConstSharedPtr & info_msg)
 {
+  // std::cout<<"PointCloudXyzrgbLabelNode::imageCb called"<<std::endl;
+  rclcpp::Time combined_time(combined_msg_in->header.stamp);
+  PointCloud2::ConstSharedPtr current_lidar_pointcloud = lidar_cache_->getElemBeforeTime(combined_time);
+
+  if (!current_lidar_pointcloud) {
+    RCLCPP_WARN(this->get_logger(), "No synchronized LiDAR pointcloud found in cache.");
+    return;
+  }
+  PointCloud2::ConstSharedPtr latest_lidar_pointcloud_ = current_lidar_pointcloud;
+
+  // rclcpp::Time lidar_time(latest_lidar_pointcloud_->header.stamp);
+  // double time_diff = (combined_time - lidar_time).seconds(); 
+  // std::cout << "latest_lidar_pointcloud_ stamp: " << lidar_time.nanoseconds() << std::endl;
+  // std::cout << "combined_msg_in stamp: " << combined_time.nanoseconds() << std::endl;
+  // std::cout << "Time Difference (Combined - LiDAR) [s]: " << time_diff << std::endl;
+  // std::cout << "----------------------------" << std::endl;
 
   if (latest_lidar_pointcloud_->header.frame_id != target_frame_) {
     try {
@@ -179,9 +208,9 @@ void PointCloudXyzrgbLabelNode::imageCb(
       // Do not update latest_transformed_pointcloud_ to avoid projecting from a non-optical frame
     }
   } else {
-    // Already in target frame; keep as-is
-    latest_transformed_pointcloud_ = latest_lidar_pointcloud_;
-  }
+    latest_transformed_pointcloud_ = 
+      std::make_shared<sensor_msgs::msg::PointCloud2>(*latest_lidar_pointcloud_); 
+}
   // RCLCPP_INFO(
   //   get_logger(), "PointCloudXyzrgbLabelNode::imageCb called");
 
@@ -229,23 +258,23 @@ void PointCloudXyzrgbLabelNode::imageCb(
   } else {
     throw std::runtime_error("Unsupported combined image encoding: " + combined_msg->encoding);
     return;
-    try {
-      combined_msg = cv_bridge::toCvCopy(combined_msg, sensor_msgs::image_encodings::RGB8)->toImageMsg();
-    } catch (cv_bridge::Exception & e) {
-      RCLCPP_ERROR(
-        get_logger(), "Unsupported encoding [%s]: %s", combined_msg->encoding.c_str(), e.what());
-      return;
-    }
-    red_offset = 0;
-    green_offset = 1;
-    blue_offset = 2;
-    color_step = 3;
+    // try {
+    //   combined_msg = cv_bridge::toCvCopy(combined_msg, sensor_msgs::image_encodings::RGB8)->toImageMsg();
+    // } catch (cv_bridge::Exception & e) {
+    //   RCLCPP_ERROR(
+    //     get_logger(), "Unsupported encoding [%s]: %s", combined_msg->encoding.c_str(), e.what());
+    //   return;
+    // }
+    // red_offset = 0;
+    // green_offset = 1;
+    // blue_offset = 2;
+    // color_step = 3;
   }
 
   auto cloud_msg = std::make_shared<PointCloud2>();
-  cloud_msg->header = depth_msg->header;  // Use depth image time stamp
-  cloud_msg->height = depth_msg->height;
-  cloud_msg->width = depth_msg->width;
+  cloud_msg->header = latest_transformed_pointcloud_->header;  // Use depth image time stamp
+  cloud_msg->height = latest_transformed_pointcloud_->height;
+  cloud_msg->width = latest_transformed_pointcloud_->width;
   cloud_msg->is_dense = false;
   cloud_msg->is_bigendian = false;
   sensor_msgs::PointCloud2Modifier pcd_modifier(*cloud_msg);
@@ -258,9 +287,9 @@ void PointCloudXyzrgbLabelNode::imageCb(
   "label", 1, sensor_msgs::msg::PointField::UINT8);
 
   auto ground_cloud_msg = std::make_shared<PointCloud2>();
-  ground_cloud_msg->header = depth_msg->header;  // Use depth image time stamp
-  ground_cloud_msg->height = depth_msg->height;
-  ground_cloud_msg->width = depth_msg->width;
+  ground_cloud_msg->header = latest_transformed_pointcloud_->header;  // Use depth image time stamp
+  ground_cloud_msg->height = latest_transformed_pointcloud_->height;
+  ground_cloud_msg->width = latest_transformed_pointcloud_->width;
   ground_cloud_msg->is_dense = false;
   ground_cloud_msg->is_bigendian = false;
   sensor_msgs::PointCloud2Modifier ground_pcd_modifier(*ground_cloud_msg);
@@ -271,7 +300,7 @@ void PointCloudXyzrgbLabelNode::imageCb(
   "z", 1, sensor_msgs::msg::PointField::FLOAT32,
   "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
   "label", 1, sensor_msgs::msg::PointField::UINT8);
-  
+
 
 
   if (!filter_labels_.empty()) {
@@ -289,15 +318,51 @@ void PointCloudXyzrgbLabelNode::imageCb(
   }else{
     throw std::runtime_error("No filter labels specified, full pointcloud generation not implemented yet.");
     return;
-
+    
   }
 
 
-  // pcl point with labels outlier removal
-  
 
-  pub_point_cloud_->publish(*cloud_msg);
-  pub_ground_point_cloud_->publish(*ground_cloud_msg);
+
+  // pcl point with labels outlier removal
+  PCLPointCloud2 pcl_cloud;
+  pcl_conversions::toPCL(*cloud_msg, pcl_cloud);
+  PCLPointCloud2::Ptr input_pcl_cloud_points = std::make_shared<PCLPointCloud2>(std::move(pcl_cloud));
+  PCLPointCloud2::Ptr output_pcl_cloud_points = std::make_shared<pcl::PCLPointCloud2>();
+
+  pcl::StatisticalOutlierRemoval<PCLPointCloud2> sor;
+  sor.setInputCloud (input_pcl_cloud_points);
+  sor.setMeanK (outlier_reject_MeanK_);
+  sor.setStddevMulThresh (outlier_reject_StddevMulThresh_);
+  sor.filter (*output_pcl_cloud_points);
+
+  // Convert filtered PCLPointCloud2 back to ROS PointCloud2
+  PointCloud2::Ptr filtered_cloud_msg = std::make_shared<PointCloud2>();
+  pcl_conversions::fromPCL(*output_pcl_cloud_points, *filtered_cloud_msg);
+  filtered_cloud_msg->header = cloud_msg->header;
+
+  PCLPointCloud2 ground_pcl_cloud;
+  pcl_conversions::toPCL(*ground_cloud_msg, ground_pcl_cloud);
+  PCLPointCloud2::Ptr input_ground_pcl_cloud_points = std::make_shared<PCLPointCloud2>(std::move(ground_pcl_cloud));
+  PCLPointCloud2::Ptr output_ground_pcl_cloud_points = std::make_shared<pcl::PCLPointCloud2>();
+
+  pcl::StatisticalOutlierRemoval<PCLPointCloud2> ground_sor;
+  ground_sor.setInputCloud (input_ground_pcl_cloud_points);
+  ground_sor.setMeanK (outlier_reject_MeanK_);
+  ground_sor.setStddevMulThresh (outlier_reject_StddevMulThresh_);
+  ground_sor.filter (*output_ground_pcl_cloud_points);
+
+  // Convert filtered PCLPointCloud2 back to ROS PointCloud2
+  PointCloud2::Ptr filtered_ground_cloud_msg = std::make_shared<PointCloud2>();
+  pcl_conversions::fromPCL(*output_ground_pcl_cloud_points, *filtered_ground_cloud_msg);
+  filtered_ground_cloud_msg->header = ground_cloud_msg->header;
+
+  pub_point_cloud_->publish(*filtered_cloud_msg);
+  pub_ground_point_cloud_->publish(*filtered_ground_cloud_msg);
+
+
+  // pub_point_cloud_->publish(*cloud_msg);
+  // pub_ground_point_cloud_->publish(*ground_cloud_msg);
 }
 
 }  // namespace depth_image_proc

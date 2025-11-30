@@ -21,6 +21,8 @@ if(NOT EIGEN3_FOUND)
 endif()
 
 find_package(OpenCV REQUIRED)
+find_package(PCL REQUIRED)
+find_package(pcl_ros REQUIRED)
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/conversions.cpp

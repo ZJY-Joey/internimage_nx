@@ -80,14 +80,14 @@ def generate_launch_description():
                         'filter_labels': [2, 3, 6, 9, 11, 12, 13, 29, 46, 52, 53, 54, 59, 61, 91, 94, 121],   
                         'filter_keep': False,   # drop specified labels
                         'target_frame': 'rs_d455_color_optical_frame',
-                        'outlier_reject_MeanK': 50,
-                        'outlier_reject_StddevMulThresh': 1.0,
+                        'outlier_reject_MeanK': 100 ,
+                        'outlier_reject_StddevMulThresh': 0.1,
                     }],
                     # to be changed too many here
                     remappings=[('rgb/camera_info', '/camera/rs_d455/color/camera_info'),
                                 ('combined/image_rect_combined', '/internimage/combined_segmentation_mask'),
                                 ('depth_registered/image_rect','/camera/rs_d455/depth/image_rect_raw'), #   /zed/zed_node/depth/depth_registered
-                                ('lidar/points', '/livox_points/x_filtered/z_filtered'), #'/cloud_registered/filtered/acc/filtered'),
+                                ('lidar/points', '/livox_points/acc/x_filtered'), #'/cloud_registered/filtered/acc/filtered'),
                                 ('points', '/internimage/segmentation/projected/points'),
                                 ('ground_points', '/internimage/segmentation/ground_points')]
                 ),
@@ -112,37 +112,21 @@ def generate_launch_description():
                 # ),
 
                 # for cloud acc
-                launch_ros.descriptions.ComposableNode(
-                    package='pcl_ros',
-                    plugin='pcl_ros::PassThrough',
-                    name='voxeled_passthrough_filter_node',
-                    parameters=[{
-                        'use_sim_time': use_sim_time,
-                        'input_frame': 'aliengo',
-                        'output_frame': 'aliengo',  
-                        'filter_field_name': 'z',
-                        'filter_limit_min': -0.5,
-                        'filter_limit_max': 100.0,
-                    }],
-                    remappings=[('input', '/internimage/segmentation/projected/points'),
-                                ('output', '/internimage/segmentation/filtered/points')]
-                ),
-
-                launch_ros.descriptions.ComposableNode(
-                    package='pcl_ros',
-                    plugin='pcl_ros::PassThrough',
-                    name='lidar_points_passthrough_filter_node',
-                    parameters=[{
-                        'use_sim_time': use_sim_time,
-                        'input_frame': 'aliengo',
-                        'output_frame': 'aliengo',  
-                        'filter_field_name': 'x',
-                        'filter_limit_min': 0.5,
-                        'filter_limit_max': 100.0,
-                    }],
-                    remappings=[('input', '/livox_points'),
-                                ('output', '/livox_points/filtered')]
-                ),
+                # launch_ros.descriptions.ComposableNode(
+                #     package='pcl_ros',
+                #     plugin='pcl_ros::PassThrough',
+                #     name='voxeled_passthrough_filter_node',
+                #     parameters=[{
+                #         'use_sim_time': use_sim_time,
+                #         'input_frame': 'aliengo',
+                #         'output_frame': 'aliengo',  
+                #         'filter_field_name': 'z',
+                #         'filter_limit_min': -0.5,
+                #         'filter_limit_max': 100.0,
+                #     }],
+                #     remappings=[('input', '/internimage/segmentation/projected/points'),
+                #                 ('output', '/internimage/segmentation/filtered/points')]
+                # ),
 
                 # for octomap
                 # launch_ros.descriptions.ComposableNode(

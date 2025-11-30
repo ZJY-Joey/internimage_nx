@@ -54,6 +54,18 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 
+// PCL Headers
+#include <pcl/point_types.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/PCLPointCloud2.h> // Now explicitly used for internal storage
+#include <pcl/point_cloud.h>
+#include <pcl_conversions/pcl_conversions.h> // Essential for ROS <-> PCL conversions
+
+// TF2 Headers
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2/buffer_core.h>
+#include <message_filters/cache.h>
+
 namespace depth_image_proc
 {
 
@@ -66,12 +78,11 @@ private:
   using PointCloud2 = sensor_msgs::msg::PointCloud2;
   using Image = sensor_msgs::msg::Image;
   using CameraInfo = sensor_msgs::msg::CameraInfo;
+  using PCLPointCloud2 = pcl::PCLPointCloud2; // Alias for PCL type
 
   // Subscriptions
   // Image subscriptions (depth, combined segmentation/color, confidence)
   image_transport::SubscriberFilter sub_depth_, sub_combined_;
-  // Lidar pointcloud subscription (needs a plain message_filters::Subscriber, not image_transport)
-  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_pointcloud_;
   message_filters::Subscriber<CameraInfo> sub_info_;
   using SyncPolicy =
     message_filters::sync_policies::ApproximateTime<Image, Image, CameraInfo>;
@@ -79,7 +90,14 @@ private:
     message_filters::sync_policies::ExactTime<Image, Image, CameraInfo>;
   using Synchronizer = message_filters::Synchronizer<SyncPolicy>;
   using ExactSynchronizer = message_filters::Synchronizer<ExactSyncPolicy>;
-  
+  using PointCloudCache = message_filters::Cache<PointCloud2>;
+  using PointCloud2ConstPtr = PointCloud2::ConstSharedPtr;
+  using AddFunction = void (message_filters::Cache<PointCloud2>::* ) (PointCloud2ConstPtr);
+  using PointCloud2SharedPtr = sensor_msgs::msg::PointCloud2::SharedPtr;
+  using PointCloud2ConstSharedPtr = sensor_msgs::msg::PointCloud2::ConstSharedPtr;
+
+
+
   std::shared_ptr<Synchronizer> sync_;
   std::shared_ptr<ExactSynchronizer> exact_sync_;
 
@@ -89,8 +107,8 @@ private:
   rclcpp::Publisher<PointCloud2>::SharedPtr pub_ground_point_cloud_;
 
   image_geometry::PinholeCameraModel model_;
-  sensor_msgs::msg::PointCloud2::SharedPtr latest_lidar_pointcloud_;
-  sensor_msgs::msg::PointCloud2::SharedPtr latest_transformed_pointcloud_;
+  PointCloud2::SharedPtr latest_lidar_pointcloud_;
+  PointCloud2::SharedPtr latest_transformed_pointcloud_;
   rclcpp::Time last_processed_lidar_cloud_stamp_;
 
   void connectCb();
@@ -100,8 +118,7 @@ private:
     const Image::ConstSharedPtr & combined_msg,
     const CameraInfo::ConstSharedPtr & info_msg);
   
-  void pointcloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
-
+  void pointcloud_callback(const PointCloud2::SharedPtr msg);
   // Filtering configuration
   std::unordered_set<uint8_t> filter_labels_{15};   // Labels to drop (default) or keep (if filter_keep_ = true)
   bool filter_keep_{false};                       // false: drop labels in set; true: keep only labels in set
@@ -111,6 +128,13 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
   std::string target_frame_;
+  int outlier_reject_MeanK_;
+  double outlier_reject_StddevMulThresh_;
+
+  //lidar cache
+  std::shared_ptr<PointCloudCache> lidar_cache_;
+  rclcpp::Subscription<PointCloud2>::SharedPtr sub_pointcloud_cache_;
+  static const int LIDAR_CACHE_SIZE = 100;
 };
 
 }  // namespace depth_image_proc
