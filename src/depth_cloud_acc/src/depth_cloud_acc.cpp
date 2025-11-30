@@ -159,7 +159,7 @@ private:
       input.reset(new pcl::PCLPointCloud2(*output));
       output->header.frame_id = fixed_frame_;
       aggregated_.reset(new pcl::PCLPointCloud2(*output));
-      RCLCPP_INFO(this->get_logger(), "Filtered aggregated cloud to width=%u", aggregated_->width);
+      // RCLCPP_INFO(this->get_logger(), "Filtered aggregated cloud to width=%u", aggregated_->width);
     } catch (const tf2::TransformException & e) {
       RCLCPP_WARN(this->get_logger(), "Filtering aggregated failed (TF): %s", e.what());
     } catch (const std::exception & e) {
@@ -253,7 +253,7 @@ private:
   void downsample_aggregated()
   {
     std::lock_guard<std::mutex> lock(agg_mutex_);
-    RCLCPP_INFO(this->get_logger(), "Downsampling aggregated cloud with %u points", aggregated_ ? aggregated_->width : 0);
+    // RCLCPP_INFO(this->get_logger(), "Downsampling aggregated cloud with %u points", aggregated_ ? aggregated_->width : 0);
     if (!aggregated_ || aggregated_->width == 0) {
       return;
     }
@@ -269,6 +269,7 @@ private:
 
       // Preserve header/frame
       output->header.frame_id = fixed_frame_;
+      output->header.stamp = input->header.stamp;
       aggregated_ = output;
       RCLCPP_INFO(this->get_logger(), "Downsampled aggregated cloud to width=%u", aggregated_->width);
     } catch (const std::exception & e) {

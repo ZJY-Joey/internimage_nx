@@ -372,7 +372,7 @@ void convertLabelAndRgbWithLidar(
     cloud_msg->height = 1;
     cloud_msg->row_step = 0;
     cloud_msg->is_dense = false;
-    std::cout << "cloud_msg points: 0" << std::endl;
+    // std::cout << "cloud_msg points: 0" << std::endl;
     return;
   }
 
@@ -483,7 +483,7 @@ void convertLabelAndRgbWithLidar(
   cloud_msg->header.stamp = lidar_msg->header.stamp;
 
   // Output the number of points
-  std::cout << "cloud_msg points: " << written << std::endl;
+  // std::cout << "cloud_msg points: " << written << std::endl;
 }
 
 // Handles float or uint16 depths
