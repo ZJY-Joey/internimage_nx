@@ -74,7 +74,7 @@ def generate_launch_description():
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
                         'use_sim_time': use_sim_time, # moutain 3, 6, 9, 11, 30, 52, 53, 54, 58, 59, 95, 120  # yard 2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120
-                        'filter_labels': [2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120],   # 3, 6, 9, 11, 12, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路 
+                        'filter_labels': [2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120],   # 3, 6, 9, 11, 12人, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路 
                         'filter_keep': False,   # drop specified labels
                         'target_frame': 'rs_d455_color_optical_frame',
                     }],
