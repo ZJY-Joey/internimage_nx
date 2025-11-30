@@ -53,14 +53,14 @@ def generate_launch_description():
                     parameters=[{
                         'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
-                        'output_frame': 'aliengo',  
+                        'output_frame': 'world',  
                         'filter_field_name': 'x',
                         'filter_limit_min': 0.5,
                         # with too many ground points, octomap server will be too slow and do not actually update
                         'filter_limit_max': 100.0,
                     }],
-                    remappings=[('input', '/livox_points'),
-                                ('output', '/livox_points/x_filtered')]
+                    remappings=[('input', '/livox_points/acc'),
+                                ('output', '/livox_points/acc/x_filtered')]
                 ),
 
             launch_ros.descriptions.ComposableNode(
@@ -76,8 +76,8 @@ def generate_launch_description():
                     # with too many ground points, octomap server will be too slow and do not actually update
                     'filter_limit_max': 2.0,
                 }],
-                remappings=[('input', '/livox_points/x_filtered'),
-                            ('output', '/livox_points/x_filtered/z_filtered')]
+                remappings=[('input', '/livox_points/acc/x_filtered'),
+                            ('output', '/livox_points/acc/x_filtered/z_filtered')]
             ),
         ],
         output='screen',
