@@ -76,7 +76,7 @@ def generate_launch_description():
 
     # ground points for octomap clear
     ground_points_acc_launch_file_path = os.path.join(
-        get_package_share_directory('depth_cloud_acc'), 'launch', 'ground_points_acc.launch.py'
+        get_package_share_directory('livox_lidar_acc'), 'launch', 'ground_points_acc.launch.py'
     )
     ground_points_acc_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(ground_points_acc_launch_file_path),

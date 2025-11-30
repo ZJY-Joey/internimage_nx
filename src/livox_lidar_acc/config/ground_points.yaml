@@ -1,4 +1,4 @@
-depth_cloud_acc:
+livox_lidar_acc:
   ros__parameters:
     # subscribe topics
     input_depth_points_topic: "/internimage/segmentation/ground_points"

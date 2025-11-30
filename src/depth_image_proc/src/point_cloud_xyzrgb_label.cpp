@@ -292,6 +292,10 @@ void PointCloudXyzrgbLabelNode::imageCb(
 
   }
 
+
+  // pcl point with labels outlier removal
+  
+
   pub_point_cloud_->publish(*cloud_msg);
   pub_ground_point_cloud_->publish(*ground_cloud_msg);
 }

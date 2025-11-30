@@ -10,7 +10,7 @@ from launch_ros.actions import Node, ComposableNodeContainer
 def generate_launch_description():
 
     params_file = PathJoinSubstitution([
-        FindPackageShare("depth_cloud_acc"), "config", "ground_points.yaml"
+        FindPackageShare("livox_lidar_acc"), "config", "ground_points.yaml"
     ])
 
     use_sim_time_arg = DeclareLaunchArgument(
@@ -35,7 +35,7 @@ def generate_launch_description():
                     parameters=[{
                         'use_sim_time': use_sim_time,
                         'input_frame': 'aliengo',
-                        'output_frame': 'camera_init',  
+                        'output_frame': 'world',  
                         'filter_field_name': 'x',
                         'filter_limit_min': 0.0,
                         'filter_limit_max': 5.0,
@@ -51,9 +51,9 @@ def generate_launch_description():
 
 
     ground_points_acc_node = Node(
-        package='depth_cloud_acc',
-        executable='depth_cloud_acc',
-        name='depth_cloud_acc',
+        package='livox_lidar_acc',
+        executable='livox_lidar_acc',
+        name='livox_lidar_acc',
         parameters=[params_file, {'use_sim_time': use_sim_time,}],
         output='screen',
     )
