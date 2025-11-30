@@ -17,5 +17,5 @@ livox_lidar_acc:
     # params for registered cloud accumulation
     acc_cloud_registered: true
     max_aggregated_frames: 20  # number of frames to be accumulated
-    voxel_leaf_size: 0.3
+    # voxel_leaf_size: 0.3
  

@@ -145,6 +145,7 @@ class LivoxLidarAccNode : public rclcpp::Node{
     aggregated_->width += cloud->width;
     aggregated_->row_step = aggregated_->width * aggregated_->point_step;
     aggregated_->header.frame_id = fixed_frame_;
+    aggregated_->header.stamp = cloud->header.stamp;
     ++aggregated_frames_;
     enforce_limits();
   }
@@ -152,7 +153,7 @@ class LivoxLidarAccNode : public rclcpp::Node{
   void publish_map()
   {
     if (aggregated_) {
-      aggregated_->header.stamp = this->now();
+      // aggregated_->header.stamp = this->now();
       publisher_->publish(*aggregated_);
     }
   }
