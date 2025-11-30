@@ -73,10 +73,15 @@ def generate_launch_description():
                     plugin='depth_image_proc::PointCloudXyzrgbLabelNode',
                     name='point_cloud_xyzrgb_label_node',
                     parameters=[{
-                        'use_sim_time': use_sim_time, # moutain 3, 6, 9, 11, 30, 52, 53, 54, 58, 59, 95, 120  # yard 2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120
-                        'filter_labels': [2, 3, 6, 9, 11, 12, 13, 30, 46, 52, 53, 54, 58, 59, 91, 94, 120],   # 3, 6, 9, 11, 12人, 13地面, 30, 46沙地, 52, 53, 54, 58, 59, 95, 120 94土地 91土路 
+                        # 2天空, 3地板, 6道路, 9草地, 11人行道, 12人, 13地面泥土, 29田野, 46沙地, 52小径, 53楼梯, 54跑道, 59楼梯间, 61桥, 91土路，94土地，121台阶
+                        # moutain 2, 3, 6, 11, 12, 52, 53, 54, 58, 59, 95, 121
+                        # grassland 2, 3, 6, 9, 11, 12, 13, 29, 46, 52, 53, 54, 59, 61, 91, 94, 121
+                        'use_sim_time': use_sim_time, # moutain   # yard 
+                        'filter_labels': [2, 3, 6, 9, 11, 12, 13, 29, 46, 52, 53, 54, 59, 61, 91, 94, 121],   
                         'filter_keep': False,   # drop specified labels
                         'target_frame': 'rs_d455_color_optical_frame',
+                        'outlier_reject_MeanK': 50,
+                        'outlier_reject_StddevMulThresh': 1.0,
                     }],
                     # to be changed too many here
                     remappings=[('rgb/camera_info', '/camera/rs_d455/color/camera_info'),
