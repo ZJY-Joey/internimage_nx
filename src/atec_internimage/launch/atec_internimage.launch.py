@@ -48,7 +48,7 @@ def generate_launch_description():
     )
 
     livox_lidar_acc_launch_file_path = os.path.join(
-        get_package_share_directory('livox_lidar_acc'), 'launch', 'livox_lidar_acc.launch.py'
+        get_package_share_directory('depth_cloud_acc'), 'launch', 'livox_lidar_acc.launch.py'
     )
     livox_lidar_acc_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(livox_lidar_acc_launch_file_path),
@@ -88,7 +88,7 @@ def generate_launch_description():
     depth_cloud_octomap_launch_file_path = os.path.join(
         get_package_share_directory('atec_internimage'), 'launch', 'pc2octomap.launch.py'
     )
-    depth_cloud_octomap_node = IncludeLaunchDescription(
+    octomap_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(depth_cloud_octomap_launch_file_path),
         launch_arguments={'use_sim_time': use_sim_time }.items(),
     )
@@ -109,10 +109,10 @@ def generate_launch_description():
         internimage_node,
         # cloud_registered_acc_node,
         livox_lidar_acc_node,
-        ground_points_acc_node,
+        # ground_points_acc_node,
         depth_proc_node,
-        global_map_node,
-        depth_cloud_octomap_node,
+        # global_map_node,
+        octomap_node,
         octomap_update_node,
     ])
     return ld

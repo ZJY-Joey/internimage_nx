@@ -27,24 +27,24 @@ def generate_launch_description():
         package='rclcpp_components',
         executable='component_container',
         composable_node_descriptions=[
-            launch_ros.descriptions.ComposableNode(
-                package='pcl_ros',
-                plugin='pcl_ros::VoxelGrid',
-                name='ground_voxel_grid_node_acc_map',
-                parameters=[
-                    {
-                        'use_sim_time': use_sim_time,
-                        'input_frame': 'world',
-                        'output_frame': 'world',  
-                        'leaf_size': 0.1,
-                        'filter_field_name': 'z',
-                        'filter_limit_min': -1000.0,
-                        'filter_limit_max': 1000.0,
-                    }
-                ],
-                remappings=[('input', '/internimage/segmentation/ground_points/acc/filtered_x'),
-                            ('output', '/internimage/segmentation/ground_points/acc/filtered_x/voxelized')]
-            ),
+            # launch_ros.descriptions.ComposableNode(
+            #     package='pcl_ros',
+            #     plugin='pcl_ros::VoxelGrid',
+            #     name='ground_voxel_grid_node_acc_map',
+            #     parameters=[
+            #         {
+            #             'use_sim_time': use_sim_time,
+            #             'input_frame': 'aliengo',
+            #             'output_frame': 'world',  
+            #             'leaf_size': 0.1,
+            #             'filter_field_name': 'z',
+            #             'filter_limit_min': -1.0,
+            #             'filter_limit_max': .0,
+            #         }
+            #     ],
+            #     remappings=[('input', '/internimage/segmentation/ground_points'),
+            #                 ('output', '/internimage/segmentation/ground_points')]
+            # ),
         ],
         output='screen',
     )

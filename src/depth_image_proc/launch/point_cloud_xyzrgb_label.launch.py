@@ -87,166 +87,17 @@ def generate_launch_description():
                     remappings=[('rgb/camera_info', '/camera/rs_d455/color/camera_info'),
                                 ('combined/image_rect_combined', '/internimage/combined_segmentation_mask'),
                                 ('depth_registered/image_rect','/camera/rs_d455/depth/image_rect_raw'), #   /zed/zed_node/depth/depth_registered
-                                ('lidar/points', '/livox_points/acc/x_filtered/z_filtered'), #'/cloud_registered/filtered/acc/filtered'),
+                                ('lidar/points', '/livox_points/filtered_x/acc/filtered_x'), #'/cloud_registered/filtered/acc/filtered'),
                                 ('points', '/internimage/segmentation/projected/points'),
                                 ('ground_points', '/internimage/segmentation/ground_points')]
                 ),
                 
 
-                # launch_ros.descriptions.ComposableNode(
-                #     package='pcl_ros',
-                #     plugin='pcl_ros::VoxelGrid',
-                #     name='voxel_grid_node',
-                #     parameters=[{
-                #         'use_sim_time': use_sim_time,
-                #         'input_frame': 'aliengo',
-                #         'output_frame': 'aliengo',  
-                #         'leaf_size': 0.2,
-                #         'filter_field_name': 'z',
-                #         'filter_limit_min': -1000.0,
-                #         'filter_limit_max': 1000.0,
-                #         # 'min_points_per_voxel': 100,
-                #     }],
-                #     remappings=[('input', '/internimage/segmentation/projected/points'),
-                #                 ('output', '/internimage/segmentation/voxel/points')]
-                # ),
-
-                # for cloud acc
-                # launch_ros.descriptions.ComposableNode(
-                #     package='pcl_ros',
-                #     plugin='pcl_ros::PassThrough',
-                #     name='voxeled_passthrough_filter_node',
-                #     parameters=[{
-                #         'use_sim_time': use_sim_time,
-                #         'input_frame': 'aliengo',
-                #         'output_frame': 'aliengo',  
-                #         'filter_field_name': 'z',
-                #         'filter_limit_min': -0.5,
-                #         'filter_limit_max': 100.0,
-                #     }],
-                #     remappings=[('input', '/internimage/segmentation/projected/points'),
-                #                 ('output', '/internimage/segmentation/filtered/points')]
-                # ),
-
-                # for octomap
-                # launch_ros.descriptions.ComposableNode(
-                #     package='pcl_ros',
-                #     plugin='pcl_ros::PassThrough',
-                #     name='passthrough_filter_node',
-                #     parameters=[{
-                #         'use_sim_time': use_sim_time,
-                #         'input_frame': 'aliengo',
-                #         'output_frame': 'aliengo',  
-                #         'filter_field_name': 'z',
-                #         'filter_limit_min': -1.0,
-                #         'filter_limit_max': 2.0,
-                #     }],
-                #     remappings=[('input', '/internimage/segmentation/projected/points'),
-                #                 ('output', '/internimage/segmentation/filtered/points')]
-                # ),
-
-                # ground points filter for octomap  
-                # launch_ros.descriptions.ComposableNode(
-                #     package='pcl_ros',
-                #     plugin='pcl_ros::PassThrough',
-                #     name='ground_passthrough_filter_node',
-                #     parameters=[{
-                #         'use_sim_time': use_sim_time,
-                #         'input_frame': 'aliengo',
-                #         'output_frame': 'aliengo',  
-                #         'filter_field_name': 'x',
-                #         'filter_limit_min': 0.0,
-                #         # with too many ground points, octomap server will be too slow and do not actually update
-                #         'filter_limit_max': 5.0,
-                #     }],
-                #     remappings=[('input', '/internimage/segmentation/ground_points'),
-                #                 ('output', '/internimage/segmentation/ground_points/filtered')]
-                # ),
-
-
-
-
-                # launch_ros.descriptions.ComposableNode(
-                #     package='pcl_ros',
-                #     plugin='pcl_ros::VoxelGrid',
-                #     name='voxel_grid_node_ground',
-                #     parameters=[{
-                #         'use_sim_time': use_sim_time,
-                #         'input_frame': 'aliengo',
-                #         'output_frame': 'world',  
-                #         'leaf_size': 0.5,
-                #         'filter_field_name': 'z',
-                #         'filter_limit_min': -1000.0,
-                #         'filter_limit_max': 1000.0,
-                #         # 'min_points_per_voxel': 100,
-                #     }],
-                #     remappings=[('input', '/internimage/segmentation/ground_points/filtered'),
-                #                 ('output', '/internimage/segmentation/ground_points/filtered/voxel')]
-                # ),
             ],
             output='screen',
         ),
 
         
 
-        
-        # launch_ros.actions.Node(
-        #     package='image_transport',
-        #     executable='republish',
-        #     name='confidence_decompress_node',
-        #     output='screen',
-        #     # match the CLI: ros2 run image_transport republish --ros-args -p in_transport:=compressedDepth -p out_transport:=raw \
-        #     #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
-        #     #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
-        #     parameters=[{
-        #         'use_sim_time': use_sim_time,
-        #         'in_transport': 'compressedDepth',
-        #         'out_transport': 'raw',
-        #         # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
-        #         'ffmpeg_image_transport.decoders.hevc': 'hevc_cuvid,hevc',
-        #     }],
-        #     arguments=[
-        #         'compressedDepth',
-        #         'in:=/zed/zed_node/confidence/confidence_map/compressedDepth', # /zed/zed_node/depth/depth_registered/compressed  /zed/zed_node/depth/depth_registered/compressedDepth
-        #         'raw',
-        #         'out:=/zed/zed_node/confidence/confidence_map/decompressedConfidence',
-        #     ],
-        #     remappings=[
-        #         ('in/compressedDepth', '/zed/zed_node/confidence/confidence_map/compressedDepth'),
-        #         ('out/raw', '/zed/zed_node/confidence/confidence_map/decompressedConfidence'),
-        #     ],
-        # ),
-
-        # # depth image decompressor
-        # launch_ros.actions.Node(
-        #     package='image_transport',
-        #     executable='republish',
-        #     name='depth_decompress_node',
-        #     output='screen',
-        #     # match the CLI: ros2 run image_transport republish --ros-args -p in_transport:=compressedDepth -p out_transport:=raw \
-        #     #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
-        #     #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
-        #     parameters=[{
-        #         'use_sim_time': use_sim_time,
-        #         'in_transport': 'compressedDepth',
-        #         'out_transport': 'raw',
-        #         # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
-        #         'ffmpeg_image_transport.decoders.hevc': 'hevc_cuvid,hevc',
-        #     }],
-        #     arguments=[
-        #         'compressedDepth',
-        #         'in:=/zed/zed_node/depth/depth_registered/compressedDepth', # /zed/zed_node/depth/depth_registered/compressed  /zed/zed_node/depth/depth_registered/compressedDepth
-        #         'raw',
-        #         'out:=/zed/zed_node/depth/depth_registered/decompressed',
-        #     ],
-        #     remappings=[
-        #         ('in/compressedDepth', '/zed/zed_node/depth/depth_registered/compressedDepth'),
-        #         ('out/raw', '/zed/zed_node/depth/depth_registered/decompressed'),
-        #     ],
-        # ),
-
-        # rviz
-        # launch_ros.actions.Node(
-        #     package='rviz2', executable='rviz2', output='screen',
-        #     arguments=['--display-config', default_rviz]),
+    
     ])

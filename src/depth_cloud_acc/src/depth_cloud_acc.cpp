@@ -96,6 +96,11 @@ public:
     pass_z_min_ = this->get_parameter("pass_z_min").as_double();
     pass_z_max_ = this->get_parameter("pass_z_max").as_double();
 
+    // RCLCPP_INFO(this->get_logger(), "PassThrough limits set to: x:[%.2f, %.2f], y:[%.2f, %.2f], z:[%.2f, %.2f]",
+    //   pass_x_min_, pass_x_max_, pass_y_min_, pass_y_max_, pass_z_min_, pass_z_max_);
+    // RCLCPP_INFO(this->get_logger(),"input topic : %s", input_topic_.c_str());
+    // RCLCPP_INFO(this->get_logger(),"output topic : %s", output_topic_.c_str());
+      // throw std::runtime_error("PassThrough limits invalid.");
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     // construct TransformListener with node pointer
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);

@@ -47,6 +47,8 @@ class LivoxLidarAccNode : public rclcpp::Node{
     acc_cloud_registered_ = this->get_parameter("acc_cloud_registered").as_bool();
     max_aggregated_frames_ = this->get_parameter("max_aggregated_frames").as_int();
 
+    // throw std::runtime_error("PassThrough limits invalid.");
+
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     // construct TransformListener with node pointer
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);
