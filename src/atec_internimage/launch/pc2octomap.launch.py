@@ -24,13 +24,13 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'frame_id': 'world',
             'resolution': 0.05,
-            'sensor_model/max_range': 5.0,
+            'sensor_model/max_range': 40.0,
             # 'filter_ground': True,
             # 'ground_filter/distance':0.2,
             # 'ground_filter/plane_distance' : -0.6,
 
         }], 
-        remappings=[('cloud_in', '/livox_points/acc/x_filtered/z_filtered')],
+        remappings=[('cloud_in', '/livox_points/x_filtered/acc/z_filtered/voxeled/final')],
 
     )
     

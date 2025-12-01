@@ -105,7 +105,7 @@ def generate_launch_description():
 
     ld = LaunchDescription([
         use_sim_time_arg,
-        rs_node,
+        # rs_node,
         internimage_node,
         # cloud_registered_acc_node,
         livox_lidar_acc_node,

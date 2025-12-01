@@ -27,24 +27,6 @@ def generate_launch_description():
         package='rclcpp_components',
         executable='component_container',
         composable_node_descriptions=[
-            # launch_ros.descriptions.ComposableNode(
-            #     package='pcl_ros',
-            #     plugin='pcl_ros::VoxelGrid',
-            #     name='voxel_grid_node_acc_map',
-            #     parameters=[
-            #         {
-            #             'use_sim_time': use_sim_time,
-            #             'input_frame': 'world',
-            #             'output_frame': 'world',  
-            #             'leaf_size': 0.1,
-            #             'filter_field_name': 'z',
-            #             'filter_limit_min': -1000.0,
-            #             'filter_limit_max': 1000.0,
-            #         }
-            #     ],
-            #     remappings=[('input', '/internimage/segmentation/acc_global_map'),
-            #                 ('output', '/internimage/segmentation/acc_global_map_voxelized')]
-            # ),
 
             launch_ros.descriptions.ComposableNode(
                     package='pcl_ros',
@@ -59,8 +41,8 @@ def generate_launch_description():
                         # with too many ground points, octomap server will be too slow and do not actually update
                         'filter_limit_max': 100.0,
                     }],
-                    remappings=[('input', '/livox_points/acc'),
-                                ('output', '/livox_points/acc/x_filtered')]
+                    remappings=[('input', '/livox_points'),
+                                ('output', '/livox_points/x_filtered')]
                 ),
 
             launch_ros.descriptions.ComposableNode(
@@ -76,8 +58,45 @@ def generate_launch_description():
                     # with too many ground points, octomap server will be too slow and do not actually update
                     'filter_limit_max': 1.5,
                 }],
-                remappings=[('input', '/livox_points/acc/x_filtered'),
-                            ('output', '/livox_points/acc/x_filtered/z_filtered')]
+                remappings=[('input', '/livox_points/x_filtered/acc'),
+                            ('output', '/livox_points/x_filtered/acc/z_filtered')]
+            ),
+
+            launch_ros.descriptions.ComposableNode(
+                package='pcl_ros',
+                plugin='pcl_ros::VoxelGrid',
+                name='livox_voxel_acc_node',
+                parameters=[
+                    {
+                        'use_sim_time': use_sim_time,
+                        'input_frame': 'world',
+                        'output_frame': 'livox_frame',  
+                        'leaf_size': 0.1,
+                        'filter_field_name': 'z',
+                        'filter_limit_min': -1000.0,
+                        'filter_limit_max': 1000.0,
+                    }
+                ],
+                remappings=[('input', '/livox_points/x_filtered/acc/z_filtered'),
+                            ('output', '/livox_points/x_filtered/acc/z_filtered/voxeled')]
+            ),
+
+
+            launch_ros.descriptions.ComposableNode(
+                package='pcl_ros',
+                plugin='pcl_ros::PassThrough',
+                name='temp_passthrough_node',
+                parameters=[{
+                    'use_sim_time': use_sim_time,
+                    'input_frame': 'livox_frame',
+                    'output_frame': 'livox_frame',  
+                    'filter_field_name': 'z',
+                    'filter_limit_min': -1000.0,
+                    # with too many ground points, octomap server will be too slow and do not actually update
+                    'filter_limit_max': 1000.5,
+                }],
+                remappings=[('input', '/livox_points/x_filtered/acc/z_filtered/voxeled'),
+                            ('output', '/livox_points/x_filtered/acc/z_filtered/voxeled/final')]
             ),
         ],
         output='screen',

@@ -87,7 +87,7 @@ def generate_launch_description():
                     remappings=[('rgb/camera_info', '/camera/rs_d455/color/camera_info'),
                                 ('combined/image_rect_combined', '/internimage/combined_segmentation_mask'),
                                 ('depth_registered/image_rect','/camera/rs_d455/depth/image_rect_raw'), #   /zed/zed_node/depth/depth_registered
-                                ('lidar/points', '/livox_points/acc/x_filtered/z_filtered'), #'/cloud_registered/filtered/acc/filtered'),
+                                ('lidar/points', '/livox_points/x_filtered/acc/z_filtered'), #'/cloud_registered/filtered/acc/filtered'),
                                 ('points', '/internimage/segmentation/projected/points'),
                                 ('ground_points', '/internimage/segmentation/ground_points')]
                 ),
