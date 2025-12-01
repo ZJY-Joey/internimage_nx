@@ -38,7 +38,7 @@ def generate_launch_description():
                         'output_frame': 'world',  
                         'filter_field_name': 'x',
                         'filter_limit_min': 0.0,
-                        'filter_limit_max': 5.0,
+                        'filter_limit_max': 10.0,
                     }],
                     remappings=[('input', '/internimage/segmentation/ground_points/acc'),
                                 ('output', '/internimage/segmentation/ground_points/acc/filtered_x')]

@@ -77,7 +77,7 @@ def generate_launch_description():
                         # moutain 2, 3, 6, 11, 12, 52, 53, 54, 58, 59, 95, 121
                         # grassland 2, 3, 6, 9, 11, 12, 13, 29, 46, 52, 53, 54, 59, 61, 91, 94, 121
                         'use_sim_time': use_sim_time, # moutain   # yard 
-                        'filter_labels': [2, 3, 6, 9, 11, 12, 13, 29, 46, 52, 53, 54, 59, 61, 91, 94, 121],   
+                        'filter_labels': [2, 3, 6, 11, 12, 52, 53, 54, 58, 59, 95, 121],   
                         'filter_keep': False,   # drop specified labels
                         'target_frame': 'rs_d455_color_optical_frame',
                         'outlier_reject_MeanK': 100 ,
@@ -190,60 +190,60 @@ def generate_launch_description():
         
 
         
-        launch_ros.actions.Node(
-            package='image_transport',
-            executable='republish',
-            name='confidence_decompress_node',
-            output='screen',
-            # match the CLI: ros2 run image_transport republish --ros-args -p in_transport:=compressedDepth -p out_transport:=raw \
-            #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
-            #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'in_transport': 'compressedDepth',
-                'out_transport': 'raw',
-                # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
-                'ffmpeg_image_transport.decoders.hevc': 'hevc_cuvid,hevc',
-            }],
-            arguments=[
-                'compressedDepth',
-                'in:=/zed/zed_node/confidence/confidence_map/compressedDepth', # /zed/zed_node/depth/depth_registered/compressed  /zed/zed_node/depth/depth_registered/compressedDepth
-                'raw',
-                'out:=/zed/zed_node/confidence/confidence_map/decompressedConfidence',
-            ],
-            remappings=[
-                ('in/compressedDepth', '/zed/zed_node/confidence/confidence_map/compressedDepth'),
-                ('out/raw', '/zed/zed_node/confidence/confidence_map/decompressedConfidence'),
-            ],
-        ),
+        # launch_ros.actions.Node(
+        #     package='image_transport',
+        #     executable='republish',
+        #     name='confidence_decompress_node',
+        #     output='screen',
+        #     # match the CLI: ros2 run image_transport republish --ros-args -p in_transport:=compressedDepth -p out_transport:=raw \
+        #     #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
+        #     #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
+        #     parameters=[{
+        #         'use_sim_time': use_sim_time,
+        #         'in_transport': 'compressedDepth',
+        #         'out_transport': 'raw',
+        #         # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
+        #         'ffmpeg_image_transport.decoders.hevc': 'hevc_cuvid,hevc',
+        #     }],
+        #     arguments=[
+        #         'compressedDepth',
+        #         'in:=/zed/zed_node/confidence/confidence_map/compressedDepth', # /zed/zed_node/depth/depth_registered/compressed  /zed/zed_node/depth/depth_registered/compressedDepth
+        #         'raw',
+        #         'out:=/zed/zed_node/confidence/confidence_map/decompressedConfidence',
+        #     ],
+        #     remappings=[
+        #         ('in/compressedDepth', '/zed/zed_node/confidence/confidence_map/compressedDepth'),
+        #         ('out/raw', '/zed/zed_node/confidence/confidence_map/decompressedConfidence'),
+        #     ],
+        # ),
 
-        # depth image decompressor
-        launch_ros.actions.Node(
-            package='image_transport',
-            executable='republish',
-            name='depth_decompress_node',
-            output='screen',
-            # match the CLI: ros2 run image_transport republish --ros-args -p in_transport:=compressedDepth -p out_transport:=raw \
-            #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
-            #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'in_transport': 'compressedDepth',
-                'out_transport': 'raw',
-                # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
-                'ffmpeg_image_transport.decoders.hevc': 'hevc_cuvid,hevc',
-            }],
-            arguments=[
-                'compressedDepth',
-                'in:=/zed/zed_node/depth/depth_registered/compressedDepth', # /zed/zed_node/depth/depth_registered/compressed  /zed/zed_node/depth/depth_registered/compressedDepth
-                'raw',
-                'out:=/zed/zed_node/depth/depth_registered/decompressed',
-            ],
-            remappings=[
-                ('in/compressedDepth', '/zed/zed_node/depth/depth_registered/compressedDepth'),
-                ('out/raw', '/zed/zed_node/depth/depth_registered/decompressed'),
-            ],
-        ),
+        # # depth image decompressor
+        # launch_ros.actions.Node(
+        #     package='image_transport',
+        #     executable='republish',
+        #     name='depth_decompress_node',
+        #     output='screen',
+        #     # match the CLI: ros2 run image_transport republish --ros-args -p in_transport:=compressedDepth -p out_transport:=raw \
+        #     #   --remap in/compressedDepth:=/zed/.../compressedDepth --remap out:=/zed/.../decompressed \
+        #     #   -p "ffmpeg_image_transport.decoders.hevc:=hevc_cuvid,hevc"
+        #     parameters=[{
+        #         'use_sim_time': use_sim_time,
+        #         'in_transport': 'compressedDepth',
+        #         'out_transport': 'raw',
+        #         # keep the ffmpeg decoder preference as a comma-separated string (matches CLI usage)
+        #         'ffmpeg_image_transport.decoders.hevc': 'hevc_cuvid,hevc',
+        #     }],
+        #     arguments=[
+        #         'compressedDepth',
+        #         'in:=/zed/zed_node/depth/depth_registered/compressedDepth', # /zed/zed_node/depth/depth_registered/compressed  /zed/zed_node/depth/depth_registered/compressedDepth
+        #         'raw',
+        #         'out:=/zed/zed_node/depth/depth_registered/decompressed',
+        #     ],
+        #     remappings=[
+        #         ('in/compressedDepth', '/zed/zed_node/depth/depth_registered/compressedDepth'),
+        #         ('out/raw', '/zed/zed_node/depth/depth_registered/decompressed'),
+        #     ],
+        # ),
 
         # rviz
         # launch_ros.actions.Node(

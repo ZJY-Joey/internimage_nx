@@ -21,6 +21,35 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration("use_sim_time")
 
+    ground_container_pro_map = ComposableNodeContainer(
+        name='ground_container_pro_map',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container',
+        composable_node_descriptions=[
+            launch_ros.descriptions.ComposableNode(
+                package='pcl_ros',
+                plugin='pcl_ros::VoxelGrid',
+                name='ground_voxel_grid_node_acc_map',
+                parameters=[
+                    {
+                        'use_sim_time': use_sim_time,
+                        'input_frame': 'world',
+                        'output_frame': 'world',  
+                        'leaf_size': 0.1,
+                        'filter_field_name': 'z',
+                        'filter_limit_min': -1000.0,
+                        'filter_limit_max': 1000.0,
+                    }
+                ],
+                remappings=[('input', '/internimage/segmentation/ground_points/acc/filtered_x'),
+                            ('output', '/internimage/segmentation/ground_points/acc/filtered_x/voxelized')]
+            ),
+        ],
+        output='screen',
+    )
+
+
     octomap_update_node = Node(
         package='octomap_update',
         executable='octomap_update',
@@ -36,6 +65,7 @@ def generate_launch_description():
     
     ld = LaunchDescription([
         use_sim_time_arg,
+        ground_container_pro_map,
         octomap_update_node,
     ])
     return ld
