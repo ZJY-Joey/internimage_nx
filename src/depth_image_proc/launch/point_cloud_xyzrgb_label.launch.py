@@ -77,7 +77,7 @@ def generate_launch_description():
                         # moutain 2, 3, 6, 11, 12, 52, 53, 54, 58, 59, 95, 121
                         # grassland 2, 3, 6, 9, 11, 12, 13, 29, 46, 52, 53, 54, 59, 61, 91, 94, 121
                         'use_sim_time': use_sim_time, # moutain   # yard 
-                        'filter_labels': [2, 3, 6, 9, 11, 12, 13, 29, 46, 52, 53, 54, 59, 61, 91, 94, 121],   
+                        'filter_labels': [12],   
                         'filter_keep': False,   # drop specified labels
                         'target_frame': 'rs_d455_color_optical_frame',
                         'outlier_reject_MeanK': 100 ,

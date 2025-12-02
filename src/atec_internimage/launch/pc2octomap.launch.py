@@ -30,7 +30,7 @@ def generate_launch_description():
             # 'ground_filter/plane_distance' : -0.6,
 
         }], 
-        remappings=[('cloud_in', '/livox_points/x_filtered/acc/z_filtered/voxeled/final')],
+        remappings=[('cloud_in', '/internimage/segmentation/projected/points')],
 
     )
     
